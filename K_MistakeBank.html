@@ -1,0 +1,2181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#171526">
+<meta name="color-scheme" content="dark">
+<title>错题复习提醒器</title>
+<style>
+/* ============ 单一深色主题（风格参考 25时Nightcord 的深色玻璃拟态）============ */
+:root{
+  --canvas:#171526; --canvas2:#221c33;
+  --glass:rgba(255,255,255,.055);
+  --glass2:rgba(255,255,255,.09);
+  --glass3:rgba(255,255,255,.14);
+  --line:rgba(255,255,255,.12);
+  --line2:rgba(255,255,255,.22);
+  --fg:#ecebf5; --muted:#a8a4bd; --subtle:#7d7994;
+  --accent:#a78bfa; --accent2:#7c6cf0; --accent-soft:rgba(167,139,250,.16);
+  --ok:#34d399; --warn:#fbbf24; --orange:#fb923c; --bad:#ff6b6b; --cyan:#67e8f9;
+  --shadow:0 8px 28px rgba(0,0,0,.34);
+  --glow:0 0 22px rgba(167,139,250,.35);
+}
+/* 移动端加固：降低背景模糊开销、适配动态视口 */
+@media (max-width:767px){
+  body::before{filter:blur(16px);animation-duration:40s}
+  .card,.bottomnav,.sidebar{backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%)}
+  .modal-box{max-height:88dvh}
+}
+@media (prefers-reduced-motion:reduce){
+  body::before{animation:none}
+  *{transition:none !important}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--canvas);color:var(--fg);font-size:15px;line-height:1.55;
+  -webkit-text-size-adjust:100%;min-height:100vh;overflow-x:hidden;
+}
+/* 背景光晕 */
+body::before{
+  content:"";position:fixed;inset:-20% -10% auto -10%;height:80vh;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(42% 46% at 18% 22%, rgba(124,108,240,.34), transparent 70%),
+    radial-gradient(38% 40% at 84% 12%, rgba(103,232,249,.18), transparent 70%),
+    radial-gradient(46% 44% at 66% 62%, rgba(236,120,220,.14), transparent 72%);
+  filter:blur(24px);animation:drift 26s ease-in-out infinite alternate;
+}
+@keyframes drift{from{transform:translate3d(-2%,-1%,0) scale(1)}to{transform:translate3d(2%,2%,0) scale(1.08)}}
+button,input,textarea,select{font-family:inherit;font-size:inherit;color:inherit}
+img{display:block;max-width:100%}
+.hidden{display:none !important}
+.spacer{flex:1}
+
+/* ============ 布局（移动优先）============ */
+.app{max-width:960px;margin:0 auto;padding:0 12px 12px;position:relative;z-index:1}
+.topbar{
+  position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;height:54px;
+  margin:0 -12px 4px;padding:0 12px;
+  background:linear-gradient(180deg,var(--canvas) 60%,transparent);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.tb-left{display:flex;align-items:center;gap:8px}
+.tb-title{font-size:17px;font-weight:700;letter-spacing:.5px}
+.tb-sub{font-size:11px;color:var(--subtle)}
+.iconbtn{width:38px;height:38px;border:1px solid var(--line);border-radius:12px;background:var(--glass);
+  display:inline-flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;color:var(--fg)}
+.iconbtn:active{background:var(--glass2)}
+.sidebar{display:none}
+.page-title{display:none}
+
+.bottomnav{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;
+  background:var(--glass2);backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);
+}
+.bottomnav button{position:relative;flex:1;border:none;background:transparent;padding:9px 0 8px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--subtle);font-size:12px}
+.bottomnav button.active{color:var(--accent)}
+.bottomnav button.active .bn-ico{filter:drop-shadow(0 0 8px rgba(167,139,250,.75))}
+.bn-ico{font-size:20px;line-height:1}
+.bn-badge{position:absolute;top:3px;left:50%;margin-left:6px;background:var(--bad);color:#fff;font-size:10px;
+  min-width:17px;height:17px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
+body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+
+@media (min-width:768px){
+  body{padding-bottom:0}
+  .bottomnav{display:none}
+  .topbar{display:none}
+  .page-title{display:block;font-size:23px;font-weight:800;letter-spacing:.6px;margin:24px 0 14px}
+  .app{display:flex;gap:20px;padding:0 20px 40px;align-items:flex-start}
+  .sidebar{display:block;position:sticky;top:20px;flex:0 0 210px;width:210px;padding:12px;
+    background:var(--glass);border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(16px) saturate(140%);
+    -webkit-backdrop-filter:blur(16px) saturate(140%);box-shadow:var(--shadow)}
+  .brand{font-size:15px;font-weight:800;padding:6px 10px 14px;letter-spacing:.4px}
+  .brand small{display:block;font-weight:500;font-size:11px;color:var(--subtle);margin-top:2px}
+  .sidebar button{width:100%;display:flex;align-items:center;gap:10px;border:1px solid transparent;background:transparent;
+    padding:10px;border-radius:12px;cursor:pointer;text-align:left;margin-bottom:4px;color:var(--muted)}
+  .sidebar button:hover{background:var(--glass2);color:var(--fg)}
+  .sidebar button.active{background:var(--accent-soft);border-color:var(--line2);color:var(--accent);font-weight:700;box-shadow:var(--glow)}
+  .sb-ico{font-size:17px;width:22px;text-align:center}
+  .sb-badge{margin-left:auto;background:var(--bad);color:#fff;font-size:11px;border-radius:9px;padding:1px 7px}
+  .main{flex:1;min-width:0}
+}
+
+/* ============ 通用组件 ============ */
+.card{background:var(--glass);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);
+  padding:14px;margin-bottom:12px;backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%)}
+.row{display:flex;align-items:center;gap:8px}
+.wrap{flex-wrap:wrap}
+.muted{color:var(--muted)} .small{font-size:13px} .tiny{font-size:12px}
+.mono{font-variant-numeric:tabular-nums}
+.card-h{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.card-h b{font-size:14px;letter-spacing:.3px}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 10px;font-size:12px;
+  background:var(--glass2);color:var(--muted);border:1px solid var(--line);cursor:default}
+.chip.subject{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.chip.tag{background:rgba(236,120,220,.14);color:#e879c8;border-color:transparent}
+.chip.s-red{background:rgba(255,107,107,.16);color:var(--bad);border-color:transparent}
+.chip.s-yellow{background:rgba(251,191,36,.16);color:var(--warn);border-color:transparent}
+.chip.s-orange{background:rgba(251,146,60,.16);color:var(--orange);border-color:transparent}
+.chip.s-normal{background:var(--glass2);color:var(--subtle);border-color:transparent}
+.chip.s-ok{background:rgba(52,211,153,.16);color:var(--ok);border-color:transparent}
+.btn{border:1px solid var(--line);background:var(--glass2);border-radius:13px;padding:9px 14px;cursor:pointer;
+  font-size:14px;min-height:42px;display:inline-flex;align-items:center;justify-content:center;gap:6px;color:var(--fg)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff;box-shadow:var(--glow)}
+.btn.cyan{background:linear-gradient(135deg,var(--cyan),#38bdf8);border-color:transparent;color:#04222b;font-weight:700}
+.btn.danger{border-color:rgba(255,107,107,.4);color:var(--bad);background:rgba(255,107,107,.10)}
+.btn.ghost{background:var(--glass)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.block{width:100%}
+.btn.sm{min-height:34px;padding:6px 12px;font-size:13px;border-radius:11px}
+.input,.textarea,.select{width:100%;border:1px solid var(--line);border-radius:13px;padding:10px 12px;
+  background:var(--glass2);outline:none;color:var(--fg)}
+.input:focus,.textarea:focus,.select:focus{border-color:var(--accent);box-shadow:var(--glow)}
+.textarea{min-height:78px;resize:vertical;line-height:1.6}
+.field{margin-bottom:14px}
+.field>label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;letter-spacing:.3px}
+.empty{text-align:center;color:var(--muted);padding:46px 16px}
+.empty .e-ico{font-size:48px;margin-bottom:10px;filter:drop-shadow(0 0 14px rgba(167,139,250,.5))}
+.divider{height:1px;background:var(--line);margin:12px 0}
+
+.item-card{position:relative;overflow:hidden;transition:transform .18s,border-color .18s}
+.item-card:active{transform:scale(.995)}
+.item-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--line2)}
+.item-card.st-overdue::before{background:var(--bad);box-shadow:0 0 12px var(--bad)}
+.item-card.st-today::before{background:var(--warn);box-shadow:0 0 12px var(--warn)}
+.item-card.st-soon::before{background:var(--orange);box-shadow:0 0 12px var(--orange)}
+.q-img{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--glass2)}
+.q-img img{width:100%;cursor:zoom-in}
+.thumb{width:66px;height:66px;border-radius:12px;overflow:hidden;border:1px solid var(--line);flex:0 0 66px;background:var(--glass2)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.answer-box{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line2)}
+.actions{display:flex;gap:8px;margin-top:12px}
+.actions .btn{flex:1}
+
+/* 统计 */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px}
+@media (min-width:768px){.stat-grid{grid-template-columns:repeat(4,1fr)}}
+.stat{background:var(--glass);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:15px;text-align:center}
+.stat .v{font-size:27px;font-weight:800;line-height:1.15;font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+.bar{height:9px;border-radius:6px;background:var(--glass2);overflow:hidden;margin-top:7px}
+.bar>i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--accent),var(--cyan))}
+.bar.ok>i{background:linear-gradient(90deg,var(--ok),#6ee7b7)}
+.subj-row{padding:10px 0;border-bottom:1px solid var(--line)}
+.subj-row:last-child{border-bottom:none}
+.ring{--p:0;width:104px;height:104px;border-radius:50%;display:grid;place-items:center;flex:0 0 104px;
+  background:conic-gradient(var(--accent) calc(var(--p)*1%),var(--glass2) 0);position:relative}
+.ring::after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--canvas);
+  box-shadow:inset 0 0 0 1px var(--line)}
+.ring .ring-in{position:relative;z-index:1;text-align:center}
+.ring .ring-in b{font-size:19px;font-variant-numeric:tabular-nums}
+.ring .ring-in span{display:block;font-size:11px;color:var(--muted)}
+
+/* 热力图 */
+.heat{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.heat i{aspect-ratio:1;border-radius:4px;background:var(--glass2);border:1px solid var(--line)}
+.heat i.l1{background:rgba(124,108,240,.30)}
+.heat i.l2{background:rgba(124,108,240,.55)}
+.heat i.l3{background:rgba(124,108,240,.80)}
+.heat i.l4{background:var(--accent);box-shadow:0 0 10px rgba(167,139,250,.55)}
+.heat i.today{outline:2px solid var(--cyan);outline-offset:1px}
+
+/* 成就 */
+.ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+.ach{border:1px solid var(--line);border-radius:14px;padding:10px 6px;text-align:center;background:var(--glass2);opacity:.42;filter:grayscale(1)}
+.ach.on{opacity:1;filter:none;border-color:var(--line2);background:var(--accent-soft);box-shadow:var(--glow)}
+.ach .a-ico{font-size:24px}
+.ach .a-name{font-size:11px;margin-top:4px;font-weight:700}
+.ach .a-pt{font-size:10px;color:var(--muted)}
+
+/* 开关 */
+.switch{position:relative;width:48px;height:27px;flex:0 0 48px}
+.switch input{opacity:0;width:0;height:0;position:absolute}
+.slider{position:absolute;inset:0;background:var(--glass3);border:1px solid var(--line2);border-radius:27px;transition:.18s;cursor:pointer}
+.slider::before{content:"";position:absolute;width:21px;height:21px;border-radius:50%;background:var(--fg);left:2px;top:2px;transition:.18s}
+.switch input:checked + .slider{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent}
+.switch input:checked + .slider::before{transform:translateX(21px);background:#fff}
+
+/* 弹层 */
+.modal{position:fixed;inset:0;z-index:60;background:rgba(10,8,20,.62);backdrop-filter:blur(6px);
+  display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:768px){.modal{align-items:center}}
+.modal-box{background:var(--canvas);width:100%;max-width:580px;max-height:92vh;overflow:auto;
+  border:1px solid var(--line);border-radius:20px 20px 0 0;padding:16px 14px calc(22px + env(safe-area-inset-bottom));
+  box-shadow:var(--shadow)}
+@media (min-width:768px){.modal-box{border-radius:20px;padding:18px;max-height:88vh}}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sheet-title{font-size:17px;font-weight:800}
+.imgslot{margin-bottom:8px}
+.imgslot .prev{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--glass2)}
+.imgslot .prev img{width:100%;max-height:320px;object-fit:contain}
+.upbtn{display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--line2);border-radius:13px;
+  padding:9px 14px;background:var(--glass2);cursor:pointer;font-size:14px;min-height:42px;color:var(--fg)}
+.ai-result{background:var(--glass2);border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:10px}
+.ai-result .ai-line{margin-bottom:8px;font-size:14px;line-height:1.6}
+.ai-result .ai-k{color:var(--muted);font-size:11px;display:block;letter-spacing:.4px}
+.switch-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.switch-row:last-child{border-bottom:none}
+
+/* 番茄钟 */
+.pomo-fab{position:fixed;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:45;
+  display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;border:1px solid var(--line2);
+  background:var(--glass2);backdrop-filter:blur(16px) saturate(150%);-webkit-backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:var(--shadow);cursor:pointer;color:var(--fg);font-variant-numeric:tabular-nums;font-weight:700}
+@media (min-width:768px){.pomo-fab{bottom:22px;right:22px}}
+.pomo-fab.running{border-color:var(--accent);box-shadow:var(--glow)}
+.pomo-fab.rest{border-color:var(--ok)}
+.pomo-time{font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px}
+.pomo-modes{display:flex;gap:8px;margin:14px 0}
+.pomo-modes .btn{flex:1}
+.pomo-modes .btn.on{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff}
+
+#toastWrap{position:fixed;left:0;right:0;bottom:calc(150px + env(safe-area-inset-bottom));z-index:90;
+  display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+@media (min-width:768px){#toastWrap{bottom:92px}}
+.toast{background:var(--glass3);backdrop-filter:blur(14px);color:var(--fg);border:1px solid var(--line2);
+  padding:10px 16px;border-radius:13px;font-size:14px;max-width:86vw;text-align:center;box-shadow:var(--shadow)}
+.toast.big{font-size:15px;font-weight:700;border-color:var(--accent)}
+#lightbox{position:fixed;inset:0;z-index:95;background:rgba(6,4,14,.9);display:flex;align-items:center;justify-content:center;padding:16px}
+#lightbox img{max-width:100%;max-height:100%;border-radius:12px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+/* ============ CQU 校内服务引导 ============ */
+.sec-tabs{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}
+.sec-tabs::-webkit-scrollbar{display:none}
+.sec-tabs .btn{flex:0 0 auto;white-space:nowrap}
+.lrow{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:13px;
+  border:1px solid var(--line);background:var(--glass2);margin-bottom:8px;text-decoration:none;color:var(--fg)}
+.lrow:active{background:var(--glass3);transform:translateY(1px)}
+.lrow .lr-ico{font-size:17px;width:24px;text-align:center;flex:0 0 24px}
+.lrow .lr-main{flex:1;min-width:0}
+.lrow .lr-n{font-weight:700;font-size:14px;word-break:break-all}
+.lrow .lr-d{font-size:11px;color:var(--muted);margin-top:1px}
+.lrow .lr-go{flex:0 0 auto;color:var(--subtle);font-size:13px}
+.numgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.numchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;
+  padding:7px 12px;background:var(--glass2);font-size:13px;font-variant-numeric:tabular-nums;cursor:pointer}
+.numchip:active{background:var(--glass3)}
+.numchip b{font-weight:700}
+.sechd{display:flex;align-items:center;gap:8px;margin:16px 0 8px}
+.sechd b{font-size:14px;letter-spacing:.3px}
+.sechd .line{flex:1;height:1px;background:var(--line)}
+.tagw{display:flex;flex-wrap:wrap;gap:7px}
+.subj-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
+  padding:6px 11px;background:var(--glass2);font-size:13px;cursor:pointer}
+.subj-chip .x{color:var(--bad);font-weight:700;font-size:14px;line-height:1}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper .btn{flex:0 0 38px;min-height:40px;padding:0;font-size:18px}
+.stepper .sv{flex:1;text-align:center;font-weight:800;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">📕 错题复习提醒器<small>今日复习 · 错题本 · 专注 · 统计</small></div>
+    <button data-nav="today"><span class="sb-ico">📅</span>今日复习<span class="sb-badge hidden" id="sbBadge">0</span></button>
+    <button data-nav="notebook"><span class="sb-ico">📒</span>错题本</button>
+    <button data-nav="stats"><span class="sb-ico">📊</span>统计</button>
+    <button data-nav="cqu"><span class="sb-ico">🏫</span>校内服务</button>
+    <button data-nav="settings"><span class="sb-ico">⚙️</span>设置</button>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <div>
+          <div class="tb-title" id="tbTitle">今日复习</div>
+          <div class="tb-sub" id="tbSub"></div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="iconbtn" id="gearBtn" title="设置">⚙️</button>
+      </div>
+    </header>
+    <div id="view"></div>
+  </main>
+</div>
+
+<button class="pomo-fab" id="pomoFab"><span id="pomoFabIcon">🍅</span><span id="pomoFabTime" class="mono">25:00</span></button>
+
+<nav class="bottomnav">
+  <button data-nav="today"><span class="bn-ico">📅</span><span>今日复习</span><span class="bn-badge hidden" id="bnBadge">0</span></button>
+  <button data-nav="notebook"><span class="bn-ico">📒</span><span>错题本</span></button>
+  <button data-nav="stats"><span class="bn-ico">📊</span><span>统计</span></button>
+  <button data-nav="cqu"><span class="bn-ico">🏫</span><span>校内服务</span></button>
+</nav>
+
+<div id="modal" class="modal hidden"><div class="modal-box" id="modalBox"></div></div>
+<div id="toastWrap"></div>
+
+<script>
+"use strict";
+/* =========================================================
+   0. 常量 / 工具
+   ========================================================= */
+/* ---------- 存储位置（可在「设置 → 存储与备份」里改）---------- */
+var NS_KEY="__mtool_ns";                 /* 命名空间指针本身固定，不随前缀走 */
+function loadNs(){try{var v=localStorage.getItem(NS_KEY);
+  return (v&&/^[A-Za-z0-9_]{1,24}$/.test(v))?v:"en_";}catch(e){return "en_";}}
+var nsPrefix=loadNs();                   /* localStorage 键前缀，默认 en_ */
+function K(s){return nsPrefix+s;}        /* 文本键：K("items") → en_items */
+function dbName(){return (typeof settings!=="undefined"&&settings.dbName)||"errorNotebook";}
+function dbStore(){return (typeof settings!=="undefined"&&settings.dbStore)||"images";}
+function useIDB(){return idbOK&&(typeof settings==="undefined"||settings.imgBackend!=="ls");}
+var INTERVALS=[0,1,3,7,15,30];
+var TAGS=["手滑","概念不清","没思路","公式记错","计算失误"];
+var TITLES={today:"今日复习",notebook:"错题本",stats:"统计",cqu:"CQU校内服务",settings:"设置"};
+var MASTER_AT=3;
+
+function $(s,r){return (r||document).querySelector(s);}
+function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
+function uid(){ if(window.crypto&&crypto.randomUUID){try{return crypto.randomUUID();}catch(e){}} return "id-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,10); }
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function pad(n){return n<10?"0"+n:""+n;}
+function fmtDate(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function todayStr(){return fmtDate(new Date());}
+function addDays(s,n){var p=String(s).split("-").map(Number);var d=new Date(p[0],p[1]-1,p[2]);d.setDate(d.getDate()+n);return fmtDate(d);}
+function dayDiff(a,b){var x=String(a).split("-").map(Number),y=String(b).split("-").map(Number);
+  return Math.round((Date.UTC(y[0],y[1]-1,y[2])-Date.UTC(x[0],x[1]-1,x[2]))/86400000);}
+function mmss(sec){sec=Math.max(0,Math.round(sec));return pad(Math.floor(sec/60))+":"+pad(sec%60);}
+function toast(msg,big){var w=$("#toastWrap");var t=document.createElement("div");
+  t.className="toast"+(big?" big":"");t.textContent=msg;w.appendChild(t);
+  setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},big?3200:2400);}
+function download(name,text,mime){
+  var blob=new Blob([text],{type:(mime||"application/json")+";charset=utf-8"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+}
+
+/* =========================================================
+   1. 本地存储（文本）
+   ========================================================= */
+var settings=loadSettings();
+var items=loadItems();
+var log=loadLog();
+var ach=loadAch();
+
+function loadSettings(){
+  var o={};
+  try{o=JSON.parse(localStorage.getItem(K("settings"))||"{}")||{};}catch(e){o={};}
+  var p=o.pomo||{};
+  return {
+    aiEnabled:o.aiEnabled!==false,
+    streak:o.streak||0, bestStreak:o.bestStreak||0,
+    pomo:{work:p.work||25,short:p.short||5,long:p.long||15,longEvery:p.longEvery||4},
+    goal:{reviews:o.goal&&o.goal.reviews?o.goal.reviews:20, focusMin:o.goal&&o.goal.focusMin?o.goal.focusMin:60},
+    /* 自定义复习科目（用户可在设置中增删） */
+    subjects:Array.isArray(o.subjects)?o.subjects.filter(function(s){return typeof s==="string"&&s.trim();}):[],
+    notify:o.notify!==false, sound:o.sound!==false, noise:o.noise||"",
+    /* 存储位置（可手动设置） */
+    dbName:o.dbName||"errorNotebook",
+    dbStore:o.dbStore||"images",
+    imgBackend:(o.imgBackend==="ls"?"ls":"idb"),
+    autoBackup:o.autoBackup===true, dirName:o.dirName||"",
+    apiBase:o.apiBase||"", apiModel:o.apiModel||"", apiKey:o.apiKey||""
+  };
+}
+function saveSettings(){try{localStorage.setItem(K("settings"),JSON.stringify(settings));}catch(e){toast("设置保存失败");}}
+function loadItems(){
+  try{var a=JSON.parse(localStorage.getItem(K("items"))||"[]");return Array.isArray(a)?a.map(normalize):[];}catch(e){return [];}
+}
+function normalize(o){
+  o=o||{};
+  return {
+    id:o.id||uid(),
+    subject:(o.subject||"").trim(),
+    questionText:String(o.questionText||""),        /* 不限字数 */
+    answerText:String(o.answerText||""),            /* 不限字数 */
+    analysisText:String(o.analysisText||""),        /* 思路解析，不限字数 */
+    knowledgeText:String(o.knowledgeText||""),      /* 涉及知识点，不限字数 */
+    errorTag:TAGS.indexOf(o.errorTag)>=0?o.errorTag:"",
+    questionImageKey:o.questionImageKey||"",
+    answerImageKey:o.answerImageKey||"",
+    intervalIndex:typeof o.intervalIndex==="number"?o.intervalIndex:0,
+    nextReviewDate:o.nextReviewDate||todayStr(),
+    reviewCount:o.reviewCount||0,
+    passCount:o.passCount||0
+  };
+}
+function saveItems(){try{localStorage.setItem(K("items"),JSON.stringify(items));}catch(e){toast("保存失败：存储空间可能已满");}maybeAutoBackup();}
+function loadLog(){try{return JSON.parse(localStorage.getItem(K("log"))||"{}")||{};}catch(e){return {};}}
+function saveLog(){try{localStorage.setItem(K("log"),JSON.stringify(log));}catch(e){}}
+function todayLog(){
+  var t=todayStr();
+  if(!log[t])log[t]={reviews:0,pass:0,fail:0,pomo:0,focusMin:0,added:0};
+  return log[t];
+}
+function loadAch(){try{return JSON.parse(localStorage.getItem(K("ach"))||"{}")||{};}catch(e){return {};}}
+function saveAch(){try{localStorage.setItem(K("ach"),JSON.stringify(ach));}catch(e){}}
+
+/* =========================================================
+   2. 图片存储 IndexedDB（Blob），不可用时降级 localStorage
+   ========================================================= */
+var idbOK=true, dbPromise=null, urlCache=new Map();
+function openDB(){
+  if(dbPromise)return dbPromise;
+  dbPromise=new Promise(function(res,rej){
+    var req;
+    try{req=indexedDB.open(dbName(),1);}catch(e){idbOK=false;rej(e);return;}
+    req.onupgradeneeded=function(){var db=req.result;if(!db.objectStoreNames.contains(dbStore()))db.createObjectStore(dbStore());};
+    req.onsuccess=function(){
+      var db=req.result;
+      if(db.objectStoreNames.contains(dbStore())){res(db);return;}
+      /* 库已存在但缺目标 store（改过 store 名）：升版本补建 */
+      db.close();
+      var v=(db.version||1)+1, req2;
+      try{req2=indexedDB.open(dbName(),v);}catch(e){idbOK=false;rej(e);return;}
+      req2.onupgradeneeded=function(){var d2=req2.result;if(!d2.objectStoreNames.contains(dbStore()))d2.createObjectStore(dbStore());};
+      req2.onsuccess=function(){res(req2.result);};
+      req2.onerror=function(){idbOK=false;rej(req2.error);};
+    };
+    req.onerror=function(){idbOK=false;rej(req.error);};
+    req.onblocked=function(){idbOK=false;rej(new Error("blocked"));};
+  });
+  return dbPromise;
+}
+function reopenDB(){                       /* 改库名/store 名后重连 */
+  try{if(dbPromise)dbPromise.then(function(db){try{db.close();}catch(e){}});}catch(e){}
+  dbPromise=null;idbOK=true;return openDB().catch(function(){idbOK=false;});
+}
+function openDBAny(name,store){            /* 打开任意库/store（迁移用） */
+  return new Promise(function(res,rej){
+    var req;
+    try{req=indexedDB.open(name,1);}catch(e){rej(e);return;}
+    req.onupgradeneeded=function(){var db=req.result;if(!db.objectStoreNames.contains(store))db.createObjectStore(store);};
+    req.onsuccess=function(){
+      var db=req.result;
+      if(db.objectStoreNames.contains(store)){res(db);return;}
+      db.close();
+      var v=(db.version||1)+1, req2;
+      try{req2=indexedDB.open(name,v);}catch(e){rej(e);return;}
+      req2.onupgradeneeded=function(){var d2=req2.result;if(!d2.objectStoreNames.contains(store))d2.createObjectStore(store);};
+      req2.onsuccess=function(){res(req2.result);};
+      req2.onerror=function(){rej(req2.error||new Error("open fail"));};
+    };
+    req.onerror=function(){rej(req.error||new Error("open fail"));};
+  });
+}
+openDB().catch(function(){idbOK=false;});
+function fbAll(){try{return JSON.parse(localStorage.getItem(K("images_fallback"))||"{}");}catch(e){return {};}}
+function fbSave(m){try{localStorage.setItem(K("images_fallback"),JSON.stringify(m));}catch(e){toast("图片降级存储失败：空间不足");}}
+function blobToDataURL(blob){return new Promise(function(res,rej){
+  var fr=new FileReader();fr.onload=function(){res(fr.result);};fr.onerror=function(){rej(fr.error);};fr.readAsDataURL(blob);});}
+function putImage(blob){
+  var key=uid();
+  if(useIDB()){
+    return openDB().then(function(db){return new Promise(function(res,rej){
+      var tx=db.transaction(dbStore(),"readwrite");tx.objectStore(dbStore()).put(blob,key);
+      tx.oncomplete=function(){res(key);};tx.onerror=function(){rej(tx.error);};tx.onabort=function(){rej(tx.error);};});})
+      .catch(function(){idbOK=false;return putImage(blob);});
+  }
+  return blobToDataURL(blob).then(function(u){var m=fbAll();m[key]=u;fbSave(m);return key;});
+}
+function delImage(key){
+  if(!key)return Promise.resolve();
+  if(useIDB())return openDB().then(function(db){return new Promise(function(res){
+    var tx=db.transaction(dbStore(),"readwrite");tx.objectStore(dbStore()).delete(key);
+    tx.oncomplete=function(){res();};tx.onerror=function(){res();};});}).catch(function(){return null;});
+  var m=fbAll();delete m[key];fbSave(m);return Promise.resolve();
+}
+function clearImages(){
+  urlCache.forEach(function(u){try{URL.revokeObjectURL(u);}catch(e){}});urlCache.clear();
+  try{localStorage.removeItem(K("images_fallback"));}catch(e){}
+  if(!idbOK)return Promise.resolve();
+  return openDB().then(function(db){return new Promise(function(res){
+    if(!db.objectStoreNames.contains(dbStore())){res();return;}
+    var tx=db.transaction(dbStore(),"readwrite");tx.objectStore(dbStore()).clear();
+    tx.oncomplete=function(){res();};tx.onerror=function(){res();};});}).catch(function(){return null;});
+}
+function getBlob(key){
+  if(!key||!useIDB())return Promise.resolve(null);
+  return openDB().then(function(db){return new Promise(function(res){
+    var tx=db.transaction(dbStore(),"readonly");var rq=tx.objectStore(dbStore()).get(key);
+    rq.onsuccess=function(){res(rq.result||null);};rq.onerror=function(){res(null);};});}).catch(function(){return null;});
+}
+function resolveUrl(key){
+  if(!key)return Promise.resolve("");
+  if(urlCache.has(key))return Promise.resolve(urlCache.get(key));
+  if(!useIDB())return Promise.resolve(fbAll()[key]||"");
+  return openDB().then(function(db){return new Promise(function(res){
+    var tx=db.transaction(dbStore(),"readonly");var rq=tx.objectStore(dbStore()).get(key);
+    rq.onsuccess=function(){var v=rq.result;if(!v){res("");return;}
+      var u=URL.createObjectURL(v);urlCache.set(key,u);res(u);};
+    rq.onerror=function(){res("");};});}).catch(function(){return "";});
+}
+function revokeUrl(key){ if(!key)return; if(urlCache.has(key)){try{URL.revokeObjectURL(urlCache.get(key));}catch(e){} urlCache.delete(key);} }
+function ensureUrls(keys){
+  var u=[];(keys||[]).forEach(function(k){if(k&&u.indexOf(k)<0)u.push(k);});
+  return Promise.all(u.map(function(k){return resolveUrl(k).then(function(x){if(x)urlCache.set(k,x);});}));
+}
+function imgUrl(k){return urlCache.get(k)||"";}
+
+/* =========================================================
+   3. 图片压缩（最长边 1280 / JPEG 0.8）
+   ========================================================= */
+function compressImage(src,max,quality){
+  max=max||1280;quality=quality||0.8;
+  return new Promise(function(res,rej){
+    var tmp=URL.createObjectURL(src);
+    var img=new Image();
+    img.onload=function(){
+      URL.revokeObjectURL(tmp);
+      try{
+        var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+        var s=Math.min(1,max/Math.max(w,h));
+        var cw=Math.max(1,Math.round(w*s)),ch=Math.max(1,Math.round(h*s));
+        var cv=document.createElement("canvas");cv.width=cw;cv.height=ch;
+        var ctx=cv.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,cw,ch);ctx.drawImage(img,0,0,cw,ch);
+        if(cv.toBlob)cv.toBlob(function(b){b?res(b):rej(new Error("压缩失败"));},"image/jpeg",quality);
+        else res(dataUrlToBlob(cv.toDataURL("image/jpeg",quality)));
+      }catch(e){rej(e);}
+    };
+    img.onerror=function(){URL.revokeObjectURL(tmp);rej(new Error("图片读取失败"));};
+    img.src=tmp;
+  });
+}
+function dataUrlToBlob(u){
+  var a=u.split(","),mime=a[0].match(/:(.*?);/)[1],b=atob(a[1]),n=b.length,x=new Uint8Array(n);
+  for(var i=0;i<n;i++)x[i]=b.charCodeAt(i);
+  return new Blob([x],{type:mime});
+}
+/* 取图片的数据 URL（供 AI 读图，自动再压到 1024/0.72 控制体积） */
+function imageToDataUrl(key){
+  if(!key)return Promise.resolve("");
+  if(!useIDB())return Promise.resolve(fbAll()[key]||"");
+  return getBlob(key).then(function(b){
+    if(!b)return "";
+    if(b.size<=120*1024)return blobToDataURL(b);
+    return compressImage(b,1024,0.72).then(function(s){return blobToDataURL(s);}).catch(function(){return blobToDataURL(b);});
+  });
+}
+
+/* =========================================================
+   4. 业务：复习 / 统计
+   ========================================================= */
+var view="today", filterSubject="", searchText="", expanded={}, draft=null, aiResult=null;
+var cquTab="all", cquKw="";
+
+function statusOf(it){
+  var d=dayDiff(todayStr(),it.nextReviewDate);
+  if(d<0)return {cls:"st-overdue",c2:"s-red",text:"逾期"+(-d)+"天"};
+  if(d===0)return {cls:"st-today",c2:"s-yellow",text:"今天"};
+  if(d<=3)return {cls:"st-soon",c2:"s-orange",text:d+"天后"};
+  return {cls:"",c2:"s-normal",text:d+"天后"};
+}
+function dueItems(){
+  var t=todayStr();
+  return items.filter(function(i){return i.nextReviewDate<=t;}).sort(function(a,b){
+    if(a.nextReviewDate!==b.nextReviewDate)return a.nextReviewDate<b.nextReviewDate?-1:1;
+    return (a.subject||"").localeCompare(b.subject||"","zh");});
+}
+/* 科目候选 = 自定义科目 + 已有错题里出现过的科目（去重排序） */
+function subjects(){
+  var s=[];
+  (settings.subjects||[]).forEach(function(v){v=String(v).trim();if(v&&s.indexOf(v)<0)s.push(v);});
+  items.forEach(function(i){var v=(i.subject||"").trim();if(v&&s.indexOf(v)<0)s.push(v);});
+  return s.sort(function(a,b){return a.localeCompare(b,"zh");});
+}
+function addSubject(name){
+  name=String(name||"").trim();
+  if(!name)return false;
+  if((settings.subjects||[]).indexOf(name)>=0)return false;
+  settings.subjects.push(name);saveSettings();return true;
+}
+function removeSubject(name){
+  settings.subjects=(settings.subjects||[]).filter(function(s){return s!==name;});
+  saveSettings();
+}
+function passReview(it){
+  it.intervalIndex=Math.min(it.intervalIndex+1,INTERVALS.length-1);
+  it.nextReviewDate=addDays(todayStr(),INTERVALS[it.intervalIndex]);
+  it.passCount=(it.passCount||0)+1;
+  settings.streak=(settings.streak||0)+1;
+  if(settings.streak>(settings.bestStreak||0))settings.bestStreak=settings.streak;
+  var L=todayLog();L.reviews++;L.pass++;
+  saveItems();saveSettings();saveLog();
+}
+function failReview(it){
+  it.intervalIndex=0;it.nextReviewDate=addDays(todayStr(),1);it.reviewCount=(it.reviewCount||0)+1;
+  settings.streak=0;
+  var L=todayLog();L.reviews++;L.fail++;
+  saveItems();saveSettings();saveLog();
+}
+function totalFocusMin(){
+  return Object.keys(log).reduce(function(s,k){return s+((log[k]&&log[k].focusMin)||0);},0);
+}
+function totalPomo(){
+  return Object.keys(log).reduce(function(s,k){return s+((log[k]&&log[k].pomo)||0);},0);
+}
+function studyStreak(){
+  var n=0,d=todayStr();
+  var active=function(k){var v=log[k];return v&&((v.reviews||0)>0||(v.focusMin||0)>0||(v.added||0)>0);};
+  if(!active(d))d=addDays(d,-1);
+  while(active(d)){n++;d=addDays(d,-1);}
+  return n;
+}
+
+/* =========================================================
+   5. 成就系统
+   ========================================================= */
+var ACHS=[
+  {id:"pomo1",   ico:"🍅",name:"初次的番茄",pt:10,   test:function(){return totalPomo()>=1;}},
+  {id:"pomo10",  ico:"🏆",name:"番茄收集者",pt:20,   test:function(){return totalPomo()>=10;}},
+  {id:"pomo50",  ico:"💎",name:"白金番茄",  pt:100,  test:function(){return totalPomo()>=50;}},
+  {id:"pomo100", ico:"👑",name:"钻石番茄",  pt:200,  test:function(){return totalPomo()>=100;}},
+  {id:"h1",      ico:"⏳",name:"一小时专注",pt:30,   test:function(){return totalFocusMin()>=60;}},
+  {id:"h10",     ico:"🐣",name:"十小时达人",pt:100,  test:function(){return totalFocusMin()>=600;}},
+  {id:"h50",     ico:"🦅",name:"五十小时",  pt:500,  test:function(){return totalFocusMin()>=3000;}},
+  {id:"s3",      ico:"🔥",name:"三日坚持",  pt:30,   test:function(){return studyStreak()>=3;}},
+  {id:"s7",      ico:"🌸",name:"一周全勤",  pt:70,   test:function(){return studyStreak()>=7;}},
+  {id:"s30",     ico:"💍",name:"月度全勤",  pt:300,  test:function(){return studyStreak()>=30;}},
+  {id:"r10",     ico:"✅",name:"复习十次",  pt:20,   test:function(){return items.reduce(function(s,i){return s+i.passCount+i.reviewCount;},0)>=10;}},
+  {id:"r100",    ico:"🎯",name:"复习百次",  pt:150,  test:function(){return items.reduce(function(s,i){return s+i.passCount+i.reviewCount;},0)>=100;}},
+  {id:"m10",     ico:"🧠",name:"掌握十题",  pt:120,  test:function(){return items.filter(function(i){return i.intervalIndex>=MASTER_AT;}).length>=10;}},
+  {id:"a10",     ico:"📝",name:"收集十题",  pt:20,   test:function(){return items.length>=10;}},
+  {id:"a50",     ico:"📚",name:"错题五十",  pt:100,  test:function(){return items.length>=50;}},
+  {id:"streak10",ico:"⚡",name:"连对十次",  pt:80,   test:function(){return (settings.bestStreak||0)>=10;}},
+  {id:"ai1",     ico:"🤖",name:"AI 初体验", pt:15,   test:function(){return !!ach.__ai;}}
+];
+function achPoints(){return ACHS.reduce(function(s,a){return s+(ach[a.id]?a.pt:0);},0);}
+function achLevel(){
+  var p=achPoints();
+  if(p>=2000)return {n:"传说",ico:"👑"};
+  if(p>=1000)return {n:"大师",ico:"🏅"};
+  if(p>=500)return {n:"达人",ico:"🥈"};
+  if(p>=150)return {n:"熟练",ico:"🥉"};
+  if(p>=40)return {n:"进阶",ico:"🌱"};
+  return {n:"初心",ico:"✨"};
+}
+function checkAch(){
+  var got=[];
+  ACHS.forEach(function(a){ if(!ach[a.id]&&a.test()){ach[a.id]=todayStr();got.push(a);} });
+  if(got.length){saveAch();got.forEach(function(a){toast("🏅 解锁成就："+a.name+" +"+a.pt,true);});}
+  return got;
+}
+
+/* =========================================================
+   6. 渲染路由
+   ========================================================= */
+function render(){
+  $$("[data-nav]").forEach(function(b){b.classList.toggle("active",b.getAttribute("data-nav")===view);});
+  $("#tbTitle").textContent=TITLES[view];
+  var n=dueItems().length;
+  $("#tbSub").textContent=view==="today"?(n?"待复习 "+n+" 道":"全部完成"):(view==="cqu"?"重大常用入口":"");
+  ["#sbBadge","#bnBadge"].forEach(function(s){
+    var b=$(s);if(!b)return;
+    b.textContent=n>99?"99+":String(n);b.classList.toggle("hidden",n===0);
+  });
+  if(view==="today")renderToday();
+  else if(view==="notebook")renderNotebook();
+  else if(view==="stats")renderStats();
+  else if(view==="cqu")renderCQU();
+  else renderSettings();
+}
+
+/* ---------- 今日复习 ---------- */
+function renderToday(){
+  var list=dueItems();
+  ensureUrls(list.map(function(i){return i.questionImageKey;}).concat(list.map(function(i){return i.answerImageKey;})))
+  .then(function(){
+    var v=$("#view");
+    var L=todayLog(),goal=settings.goal.reviews||20;
+    var pct=Math.min(100,Math.round(L.reviews/goal*100));
+    var html='<div class="page-title">今日复习</div>'+
+      '<div class="card"><div class="row">'+
+        '<div class="ring" style="--p:'+pct+'"><div class="ring-in"><b>'+L.reviews+'</b><span>/ '+goal+'</span></div></div>'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-weight:800">今日复习进度</div>'+
+          '<div class="small muted" style="margin-top:2px">已完成 '+L.reviews+' 道 · 答对 '+L.pass+' · 答错 '+L.fail+'</div>'+
+          '<div class="small muted">连续答对 '+settings.streak+' 次（最长 '+(settings.bestStreak||0)+'）</div>'+
+          '<div class="row" style="margin-top:8px"><button class="btn sm primary" data-act="pomo">🍅 开始专注</button>'+
+          '<button class="btn sm" data-act="selftest">🎲 自测</button></div>'+
+        '</div>'+
+      '</div></div>';
+
+    if(list.length===0){
+      html+='<div class="card empty"><div class="e-ico">🎉</div>'+
+        '<div style="font-size:16px;font-weight:700;color:var(--fg)">今日已清空</div>'+
+        '<div class="small" style="margin-top:6px">今天没有需要复习的错题，去错题本添加一道吧。</div>'+
+        '<button class="btn primary" style="margin-top:14px" data-act="go" data-view="notebook">去错题本</button></div>';
+      v.innerHTML=html;return;
+    }
+    html+='<div class="small muted" style="margin:2px 0 10px">共 '+list.length+' 道待复习，按复习日期升序</div>';
+    list.forEach(function(it){
+      var st=statusOf(it),open=!!expanded[it.id];
+      var qu=imgUrl(it.questionImageKey),au=imgUrl(it.answerImageKey);
+      html+='<div class="card item-card '+st.cls+'" data-id="'+it.id+'">'+
+        '<div class="row wrap">'+
+          '<span class="chip subject">'+esc(it.subject||"未分类")+'</span>'+
+          '<span class="chip '+st.c2+'">'+st.text+'</span>'+
+          (it.errorTag?'<span class="chip tag">'+esc(it.errorTag)+'</span>':'')+
+          '<span class="spacer"></span>'+
+          '<span class="tiny muted">第 '+Math.min(it.intervalIndex+1,INTERVALS.length)+' 轮</span>'+
+        '</div>'+
+        '<div style="margin-top:10px;font-weight:600;white-space:pre-wrap;word-break:break-word">'+esc(it.questionText)+'</div>'+
+        (qu?'<div class="q-img"><img src="'+qu+'" data-act="zoom" data-src="'+qu+'" alt="题目图片"></div>':'')+
+        (open?('<div class="answer-box"><div class="tiny muted">答案简述</div>'+
+          '<div style="white-space:pre-wrap;word-break:break-word">'+(it.answerText?esc(it.answerText):'<span class="muted">（未填写）</span>')+'</div>'+
+          (au?'<div class="q-img"><img src="'+au+'" data-act="zoom" data-src="'+au+'" alt="答案图片"></div>':'')+'</div>'+
+          (it.analysisText?'<div class="answer-box"><div class="tiny" style="color:var(--cyan);font-weight:700;letter-spacing:.4px">🧭 思路解析</div>'+
+            '<div style="white-space:pre-wrap;word-break:break-word;margin-top:4px">'+esc(it.analysisText)+'</div></div>':'')+
+          (it.knowledgeText?'<div class="answer-box"><div class="tiny" style="color:var(--accent);font-weight:700;letter-spacing:.4px">📌 涉及知识点</div>'+
+            '<div style="white-space:pre-wrap;word-break:break-word;margin-top:4px">'+esc(it.knowledgeText)+'</div></div>':'')):'')+
+        '<div class="actions"><button class="btn ghost" data-act="toggle-answer" data-id="'+it.id+'">'+(open?"收起答案":"看答案")+'</button></div>'+
+        '<div class="actions">'+
+          '<button class="btn primary" data-act="pass" data-id="'+it.id+'">✅ 会了</button>'+
+          '<button class="btn danger" data-act="fail" data-id="'+it.id+'">↻ 还不会</button>'+
+        '</div></div>';
+    });
+    v.innerHTML=html;
+  });
+}
+
+/* ---------- 错题本 ---------- */
+function renderNotebook(){
+  var subs=subjects();
+  if(filterSubject&&subs.indexOf(filterSubject)<0)filterSubject="";
+  var kw=searchText.trim().toLowerCase();
+  var list=items.filter(function(i){
+    if(filterSubject&&(i.subject||"未分类")!==filterSubject)return false;
+    if(kw&&(i.questionText+" "+i.answerText+" "+i.subject).toLowerCase().indexOf(kw)<0)return false;
+    return true;
+  }).sort(function(a,b){
+    if(a.nextReviewDate!==b.nextReviewDate)return a.nextReviewDate<b.nextReviewDate?-1:1;
+    return (a.subject||"").localeCompare(b.subject||"","zh");});
+
+  ensureUrls(list.map(function(i){return i.questionImageKey;})).then(function(){
+    var v=$("#view");
+    var opts='<option value="">全部科目</option>'+subs.map(function(s){
+      return '<option value="'+esc(s)+'"'+(s===filterSubject?" selected":"")+'>'+esc(s)+'</option>';}).join("");
+    var html='<div class="page-title">错题本</div>'+
+      '<div class="row" style="margin-bottom:12px"><button class="btn primary" data-act="add">＋ 新增错题</button>'+
+      '<button class="btn" data-act="selftest">🎲 自测</button><span class="spacer"></span>'+
+      '<span class="small muted">共 '+items.length+' 道</span></div>'+
+      '<div class="card"><div class="row">'+
+        '<select class="select" id="fSubject" style="flex:1">'+opts+'</select>'+
+        '<input class="input" id="fSearch" style="flex:1" placeholder="搜索题目/答案" value="'+esc(searchText)+'">'+
+      '</div></div>';
+    if(list.length===0){
+      html+='<div class="card empty"><div class="e-ico">📒</div><div>'+
+        (items.length===0?"还没有错题，点击「新增错题」开始吧":"没有匹配的错题")+'</div></div>';
+      v.innerHTML=html;bindFilter();restoreSearchFocus();return;
+    }
+    list.forEach(function(it){
+      var st=statusOf(it),qu=imgUrl(it.questionImageKey),mastered=it.intervalIndex>=MASTER_AT;
+      html+='<div class="card item-card '+st.cls+'" data-act="edit" data-id="'+it.id+'" style="cursor:pointer">'+
+        '<div class="row wrap"><span class="chip subject">'+esc(it.subject||"未分类")+'</span>'+
+        '<span class="chip '+st.c2+'">'+st.text+'</span>'+
+        (it.errorTag?'<span class="chip tag">'+esc(it.errorTag)+'</span>':'')+
+        (mastered?'<span class="chip s-ok">已掌握</span>':'')+
+        (it.analysisText?'<span class="chip s-ok">🧭 有解析</span>':'')+'</div>'+
+        '<div class="row" style="margin-top:10px;align-items:flex-start">'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-weight:600;white-space:pre-wrap;word-break:break-word">'+esc(it.questionText)+'</div>'+
+            '<div class="tiny muted" style="margin-top:4px">复习 '+(it.passCount+it.reviewCount)+
+            ' 次 · 答对 '+it.passCount+' 次 · 下次 '+esc(it.nextReviewDate)+'</div>'+
+          '</div>'+
+          (qu?'<div class="thumb"><img src="'+qu+'" alt="题目图片"></div>':'')+
+        '</div>'+
+        '<div class="tiny muted" style="margin-top:8px">点击卡片编辑 ›</div></div>';
+    });
+    v.innerHTML=html;bindFilter();restoreSearchFocus();
+  });
+}
+var keepSearchFocus=false;
+function restoreSearchFocus(){
+  if(!keepSearchFocus)return;keepSearchFocus=false;
+  var k=$("#fSearch");if(!k)return;k.focus();
+  try{k.setSelectionRange(k.value.length,k.value.length);}catch(e){}
+}
+function bindFilter(){
+  var s=$("#fSubject");if(s)s.addEventListener("change",function(){filterSubject=s.value;renderNotebook();});
+  var k=$("#fSearch");
+  if(k)k.addEventListener("input",function(){searchText=k.value;keepSearchFocus=true;renderNotebook();});
+}
+
+/* ---------- 统计 ---------- */
+function renderStats(){
+  var v=$("#view");
+  var total=items.length,due=dueItems().length;
+  var mastered=items.filter(function(i){return i.intervalIndex>=MASTER_AT;}).length;
+  var reviewTimes=items.reduce(function(s,i){return s+(i.passCount||0)+(i.reviewCount||0);},0);
+  var passTimes=items.reduce(function(s,i){return s+(i.passCount||0);},0);
+  var rate=reviewTimes?Math.round(passTimes/reviewTimes*100):0;
+  var L=todayLog(),lv=achLevel();
+
+  var bySub={};
+  items.forEach(function(i){
+    var s=i.subject||"未分类";
+    if(!bySub[s])bySub[s]={due:0,mastered:0,total:0};
+    bySub[s].total++;
+    if(i.nextReviewDate<=todayStr())bySub[s].due++;
+    if(i.intervalIndex>=MASTER_AT)bySub[s].mastered++;
+  });
+  var skeys=Object.keys(bySub).sort(function(a,b){return bySub[b].total-bySub[a].total;});
+
+  var tagCount={};TAGS.forEach(function(t){tagCount[t]=0;});
+  items.forEach(function(i){if(i.errorTag&&tagCount[i.errorTag]!==undefined)tagCount[i.errorTag]++;});
+  var tagMax=Math.max(1,Math.max.apply(null,TAGS.map(function(t){return tagCount[t];})));
+
+  /* 热力图：最近 35 天 */
+  var heat="";
+  var startDay=addDays(todayStr(),-34);
+  var sp=startDay.split("-").map(Number);
+  var startDow=new Date(sp[0],sp[1]-1,sp[2]).getDay();
+  for(var i=0;i<startDow;i++)heat+='<i style="visibility:hidden"></i>';
+  for(var d=0;d<35;d++){
+    var ds=addDays(startDay,d),v2=log[ds]||{};
+    var act=(v2.reviews||0)*2+(v2.focusMin||0)/10+(v2.added||0);
+    var lvl=act<=0?0:act<2?1:act<5?2:act<10?3:4;
+    heat+='<i class="'+["","l1","l2","l3","l4"][lvl]+(ds===todayStr()?" today":"")+'" title="'+ds+'"></i>';
+  }
+
+  var html='<div class="page-title">统计</div>'+
+    '<div class="stat-grid">'+
+      '<div class="stat"><div class="v" style="color:var(--orange)">'+due+'</div><div class="l">待复习</div></div>'+
+      '<div class="stat"><div class="v" style="color:var(--ok)">'+mastered+'</div><div class="l">已掌握</div></div>'+
+      '<div class="stat"><div class="v">'+reviewTimes+'</div><div class="l">总复习次数</div></div>'+
+      '<div class="stat"><div class="v" style="color:var(--accent)">'+settings.streak+'</div><div class="l">连续答对</div></div>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>🔥</span><b>专注与打卡</b><span class="spacer"></span>'+
+      '<span class="tiny muted">今日 '+L.focusMin+' 分钟 / '+L.pomo+' 个番茄</span></div>'+
+      '<div class="row wrap" style="gap:14px">'+
+        '<div><div style="font-size:22px;font-weight:800">'+totalFocusMin()+'</div><div class="tiny muted">累计专注(分钟)</div></div>'+
+        '<div><div style="font-size:22px;font-weight:800">'+totalPomo()+'</div><div class="tiny muted">累计番茄</div></div>'+
+        '<div><div style="font-size:22px;font-weight:800">'+studyStreak()+'</div><div class="tiny muted">连续学习(天)</div></div>'+
+        '<div><div style="font-size:22px;font-weight:800">'+achPoints()+'</div><div class="tiny muted">成就积分</div></div>'+
+      '</div>'+
+      '<div class="divider"></div>'+
+      '<div class="tiny muted" style="margin-bottom:8px">最近 5 周活跃度（复习 / 专注 / 新增）</div>'+
+      '<div class="heat">'+heat+'</div>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>📈</span><b>掌握进度</b><span class="spacer"></span>'+
+      '<span class="tiny muted">答对率 '+rate+'%（'+passTimes+'/'+reviewTimes+'）</span></div>'+
+      '<div class="bar ok"><i style="width:'+(total?Math.round(mastered/total*100):0)+'%"></i></div>'+
+      '<div class="tiny muted" style="margin-top:6px">已掌握 '+mastered+' / 共 '+total+' 道（间隔指数 ≥ '+MASTER_AT+' 视为掌握）</div>'+
+      '<div class="divider"></div>';
+  if(skeys.length===0)html+='<div class="small muted" style="padding:8px 0">暂无数据</div>';
+  else skeys.forEach(function(s){
+    var d2=bySub[s],pct=d2.total?Math.round(d2.mastered/d2.total*100):0;
+    html+='<div class="subj-row"><div class="row"><span style="font-weight:700">'+esc(s)+'</span><span class="spacer"></span>'+
+      '<span class="tiny muted">待复习 '+d2.due+' · 已掌握 '+d2.mastered+'/'+d2.total+'</span></div>'+
+      '<div class="bar"><i style="width:'+pct+'%"></i></div></div>';
+  });
+  html+='</div>';
+
+  html+='<div class="card"><div class="card-h"><span>🩺</span><b>错因分布</b></div>';
+  TAGS.forEach(function(t){
+    var c=tagCount[t],p=Math.round(c/tagMax*100);
+    html+='<div style="margin-bottom:8px"><div class="row"><span class="small">'+t+'</span><span class="spacer"></span>'+
+      '<span class="tiny muted">'+c+' 道</span></div><div class="bar"><i style="width:'+p+'%"></i></div></div>';
+  });
+  html+='</div>';
+
+  html+='<div class="card"><div class="card-h"><span>'+lv.ico+'</span><b>成就墙</b><span class="spacer"></span>'+
+    '<span class="tiny muted">'+lv.n+' · '+achPoints()+' 分</span></div>'+
+    '<div class="ach-grid">'+ACHS.map(function(a){
+      var on=!!ach[a.id];
+      return '<div class="ach'+(on?" on":"")+'" title="'+esc(a.name)+'"><div class="a-ico">'+a.ico+'</div>'+
+        '<div class="a-name">'+esc(a.name)+'</div><div class="a-pt">'+a.pt+' 分'+(on?" · 已解锁":"")+'</div></div>';
+    }).join("")+'</div></div>';
+  v.innerHTML=html;
+}
+
+/* ---------- CQU 校内服务引导 ---------- */
+var CQU_SITES=[
+  {n:"重庆大学党委学工部",u:"http://xgb.cqu.edu.cn/",i:"🏛️"},
+  {n:"重庆大学智慧学工",u:"https://zhxg.cqu.edu.cn/",i:"🎓"},
+  {n:"共青团重庆大学委员会",u:"http://youth.cqu.edu.cn/",i:"🚩"},
+  {n:"重庆大学本科教学信息网",u:"http://jwc.cqu.edu.cn/",i:"📖"},
+  {n:"智慧教务",u:"https://my.cqu.edu.cn/",i:"🗓️"},
+  {n:"重庆大学国际合作与交流处",u:"http://intex.cqu.edu.cn/",i:"🌏"},
+  {n:"重庆大学计划财务处",u:"http://cwc.cqu.edu.cn/",i:"💰"},
+  {n:"重庆大学网上缴费平台",u:"http://pay.cqu.edu.cn/",i:"🧾"},
+  {n:"重庆大学后勤管理处",u:"http://hqc.cqu.edu.cn/",i:"🧰"},
+  {n:"重庆大学图书馆",u:"http://lib.cqu.edu.cn/",i:"📚"},
+  {n:"重庆大学毕业生就业信息网",u:"https://cqu.cqbys.com/",i:"💼"},
+  {n:"重庆大学师生服务中心",u:"https://service.cqu.edu.cn/",i:"🛎️"},
+  {n:"重庆大学新闻网",u:"https://news.cqu.edu.cn/",i:"📰"},
+  {n:"一卡通电子服务平台",u:"http://card.cqu.edu.cn/",i:"💳"},
+  {n:"校园网自助服务",u:"http://user.cqu.edu.cn/",i:"🌐"},
+  {n:"重庆大学学生交叉创新中心",u:"https://sxic.cqu.edu.cn/home",i:"🧪"},
+  {n:"体测查分",u:"http://tzcs.cqu.edu.cn/index.jsp",i:"🏃"},
+  {n:"资源共享计划",u:"https://cqu-openlib.cn/",i:"📦"}
+];
+var CQU_WECHAT=[
+  {n:"重庆大学",d:"学校官方微信公众号（可查阅校历、校车时刻表等）"},
+  {n:"重庆大学学生工作",d:"学工部官微（奖学金、荣誉评选、学业辅导活动等各类通知）"},
+  {n:"重大青年",d:"校团委官微（校车时刻表、二课系统等）"},
+  {n:"重大财小通",d:"计财处官微（学费、住宿费、一卡通等缴费充值）"},
+  {n:"重庆大学图书馆",d:"图书借阅等"},
+  {n:"重大就业",d:"各类就业信息、就业攻略等"},
+  {n:"平安重大",d:"校保卫处官微（入校预约等）"},
+  {n:"重庆大学幸福加油站",d:"心理中心官微（心理咨询预约、心理活动通知等）"},
+  {n:"重庆大学学生会",d:"校学生会官微"},
+  {n:"重庆大学研究生会",d:"校研究生会官微"},
+  {n:"重庆大学研团委",d:"研团委官微"},
+  {n:"重大青年创新创业",d:"校团委学生创新创业中心官微"},
+  {n:"青志重大",d:"校团委学生志愿服务中心官微"}
+];
+var CQU_APPS=[
+  {n:"今日校园",d:"日常信息填报、电子校园卡、邮箱申请等，功能丰富。"}
+];
+var CQU_PHONES=[
+  {n:"党委学工部",g:[{l:"",it:[["65102389",""]]}]},
+  {n:"心理健康教育与咨询中心",g:[{l:"",it:[["65113520","A区"],["65120105","B区"],["65678089","虎溪校区"]]}]},
+  {n:"资助中心",d:"国家奖助学金、社会奖学金、困难补助、助学贷款等",g:[{l:"",it:[["65102387",""]]}]},
+  {n:"保卫处",g:[
+    {l:"报警电话",it:[["65100110","A区"],["65120110","B区"],["65118110","C区"],["65678110","虎溪校区"]]},
+    {l:"服务中心电话（户政、政审、车辆通行权限、场地审批）",it:[["65105856",""]]}
+  ]},
+  {n:"虎溪学工办",g:[{l:"",it:[["65678688",""]]}]},
+  {n:"校团委",g:[{l:"",it:[["65102805","A区"],["65678030","虎溪"]]}]},
+  {n:"计划财务处",g:[{l:"",it:[["65102662",""]]}]},
+  {n:"维修电话",g:[{l:"",it:[["65123456",""]]}]},
+  {n:"学生宿舍管理部门",g:[{l:"",it:[["65111348","A区学生宿舍服务窗口"],["65120639","B区学生宿舍服务窗口"],["65678016","虎溪校区管委会后勤与资产管理办公室"]]}]},
+  {n:"图书馆",g:[{l:"",it:[["65102601","A区"],["65678060","虎溪"]]}]},
+  {n:"一卡通中心",d:"现金充值、补办等",g:[{l:"",it:[["65112096","A区信息化办公室一楼大厅"],["65678188","虎溪松园六幢"]]}]},
+  {n:"校园网网络中心",g:[{l:"",it:[["65111500",""]]}]},
+  {n:"校医院",g:[
+    {l:"急救电话",it:[["65100120","A区"],["65120120","B区"],["65118120","C区"],["65678120","虎溪校区"]]},
+    {l:"医保办电话",it:[["65111675",""]]}
+  ]}
+];
+function hostOf(u){try{return new URL(u).host;}catch(e){return String(u).replace(/^https?:\/\//,"").split("/")[0];}}
+function cquFilter(){return String(cquKw||"").trim().toLowerCase();}
+function cquMatch(s){var k=cquFilter();if(!k)return true;return String(s||"").toLowerCase().indexOf(k)>=0;}
+function renderCQU(){
+  var v=$("#view"),k=cquFilter(),tab=cquTab||"all";
+  var html='<div class="page-title">CQU 校内服务引导</div>'+
+    '<div class="card"><div class="row">'+
+      '<input class="input" id="cquSearch" placeholder="搜索网站 / 公众号 / 电话" value="'+esc(cquKw)+'" style="flex:1">'+
+      (k?'<button class="btn sm" data-act="cqu-clear">清空</button>':'')+
+    '</div>'+
+    '<div class="sec-tabs" style="margin-top:10px">'+
+      [["all","全部"],["site","🔗 网站"],["wx","💬 公众号"],["app","📱 APP"],["tel","☎️ 电话"]].map(function(t){
+        return '<button class="btn sm '+(tab===t[0]?"primary":"")+'" data-act="cqu-tab" data-v="'+t[0]+'">'+t[1]+'</button>';}).join("")+
+    '</div></div>'+
+    '<div class="card small muted">💡 智慧教务、一卡通、校园网自助等系统通常需在校内网（或学校 VPN）环境下访问；公众号点一下即可复制名称，再到微信搜索添加；电话号码点一下即可复制号码，可自行粘贴到拨号盘。</div>';
+
+  var any=false;
+  /* 一、常用网站 */
+  if(tab==="all"||tab==="site"){
+    var s=CQU_SITES.filter(function(x){return cquMatch(x.n+" "+x.u);});
+    if(s.length){
+      any=true;
+      html+='<div class="sechd"><span>🔗</span><b>一、常用网站网址链接</b><span class="line"></span><span class="tiny muted">'+s.length+'</span></div>'+
+        '<div class="card">'+s.map(function(x){
+          return '<a class="lrow" href="'+esc(x.u)+'" target="_blank" rel="noopener noreferrer">'+
+            '<span class="lr-ico">'+(x.i||"🔗")+'</span>'+
+            '<span class="lr-main"><span class="lr-n">'+esc(x.n)+'</span>'+
+            '<span class="lr-d" style="display:block">'+esc(hostOf(x.u))+'</span></span>'+
+            '<span class="lr-go">打开 ›</span></a>';
+        }).join("")+'</div>';
+    }
+  }
+  /* 二、微信公众号 */
+  if(tab==="all"||tab==="wx"){
+    var w=CQU_WECHAT.filter(function(x){return cquMatch(x.n+" "+x.d);});
+    if(w.length){
+      any=true;
+      html+='<div class="sechd"><span>💬</span><b>二、常用微信公众号</b><span class="line"></span><span class="tiny muted">'+w.length+'</span></div>'+
+        '<div class="card">'+w.map(function(x,i){
+          return '<div class="lrow" data-act="copy" data-copy="'+esc(x.n)+'" style="cursor:pointer">'+
+            '<span class="lr-ico">💬</span>'+
+            '<span class="lr-main"><span class="lr-n">'+esc(x.n)+'</span>'+
+            '<span class="lr-d" style="display:block">'+esc(x.d)+'</span></span>'+
+            '<span class="lr-go">复制</span></div>';
+        }).join("")+'</div>';
+    }
+  }
+  /* 三、常用 APP */
+  if(tab==="all"||tab==="app"){
+    var a=CQU_APPS.filter(function(x){return cquMatch(x.n+" "+x.d);});
+    if(a.length){
+      any=true;
+      html+='<div class="sechd"><span>📱</span><b>三、常用 APP</b><span class="line"></span></div>'+
+        '<div class="card">'+a.map(function(x){
+          return '<div class="lrow" data-act="copy" data-copy="'+esc(x.n)+'" style="cursor:pointer">'+
+            '<span class="lr-ico">📱</span>'+
+            '<span class="lr-main"><span class="lr-n">'+esc(x.n)+'</span>'+
+            '<span class="lr-d" style="display:block">'+esc(x.d)+'</span></span>'+
+            '<span class="lr-go">复制</span></div>';
+        }).join("")+'</div>';
+    }
+  }
+  /* 四、常用部门电话 */
+  if(tab==="all"||tab==="tel"){
+    var p=CQU_PHONES.filter(function(x){
+      var s=x.n+" "+(x.d||"");
+      x.g.forEach(function(g){g.it.forEach(function(t){s+=" "+t[0]+" "+t[1];});});
+      return cquMatch(s);});
+    if(p.length){
+      any=true;
+      html+='<div class="sechd"><span>☎️</span><b>四、常用部门电话</b><span class="line"></span><span class="tiny muted">点击复制 · '+p.length+'</span></div>'+
+        p.map(function(x){
+          var body=x.g.map(function(g){
+            return (g.l?'<div class="tiny muted" style="margin-top:6px">'+esc(g.l)+'</div>':'')+
+              '<div class="numgrid">'+g.it.map(function(t){
+                return '<div class="numchip" data-act="copy" data-copy="'+esc(t[0])+'" role="button" tabindex="0" '+
+                  'title="点击复制号码">'+
+                  '📞 <b>'+esc(t[0])+'</b>'+(t[1]?'<span class="tiny muted">'+esc(t[1])+'</span>':'')+'</div>';
+              }).join("")+'</div>';
+          }).join("");
+          return '<div class="card"><div class="row"><span style="font-weight:800">'+esc(x.n)+'</span></div>'+
+            (x.d?'<div class="tiny muted" style="margin-top:2px">'+esc(x.d)+'</div>':'')+body+'</div>';
+        }).join("");
+    }
+  }
+  if(!any){
+    html+='<div class="card empty"><div class="e-ico">🔍</div><div>没有匹配「'+esc(cquKw)+'」的条目</div></div>';
+  }
+  v.innerHTML=html;
+  var cs=$("#cquSearch");
+  if(cs){
+    cs.addEventListener("input",function(){cquKw=cs.value;keepCquFocus=true;renderCQU();});
+    if(keepCquFocus){keepCquFocus=false;cs.focus();try{cs.setSelectionRange(cs.value.length,cs.value.length);}catch(e){}}
+  }
+}
+var keepCquFocus=false;
+
+/* ---------- 设置 ---------- */
+function renderSettings(){
+  var v=$("#view");
+  v.innerHTML='<div class="page-title">设置</div>'+
+    '<div class="card"><div class="card-h"><span>🤖</span><b>AI 增强</b></div>'+
+      '<div class="switch-row"><div style="flex:1"><div>AI 错题分析</div>'+
+        '<div class="tiny muted">新增/编辑错题时显示分析按钮；有题目图片时会一并读图</div></div>'+
+        '<label class="switch"><input type="checkbox" id="aiSwitch"'+(settings.aiEnabled?" checked":"")+'><span class="slider"></span></label></div>'+
+      '<div class="tiny muted" style="padding-top:8px">免费模型：文字用 Pollinations <b>openai-fast</b>；'+
+        '读图用 OVHcloud <b>Qwen2.5-VL-72B-Instruct</b>（免注册、支持 base64 图片）。视觉接口有频次限制，繁忙时自动降级为纯文字分析。</div>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>🍅</span><b>番茄钟时长</b><span class="spacer"></span>'+
+      '<button class="btn sm" data-act="open-pomo">打开番茄钟</button></div>'+
+      stepRow("专注时长","work",settings.pomo.work,"分钟","一段专注的时间")+
+      stepRow("短休时长","short",settings.pomo.short,"分钟","每轮专注后")+
+      stepRow("长休时长","long",settings.pomo.long,"分钟","每 "+settings.pomo.longEvery+" 轮一次")+
+      stepRow("长休间隔","longEvery",settings.pomo.longEvery,"轮","专注多少轮后进入长休")+
+      '<div class="divider"></div>'+
+      '<div class="tiny muted" style="margin-bottom:8px">快捷预设</div>'+
+      '<div class="row wrap">'+
+        '<button class="btn sm" data-act="ppreset" data-v="25,5,15,4">经典 25/5</button>'+
+        '<button class="btn sm" data-act="ppreset" data-v="45,10,20,3">长专注 45/10</button>'+
+        '<button class="btn sm" data-act="ppreset" data-v="50,10,30,4">考研 50/10</button>'+
+        '<button class="btn sm" data-act="ppreset" data-v="15,3,10,4">碎片 15/3</button>'+
+      '</div>'+
+      '<div class="divider"></div>'+
+      '<div class="switch-row"><div style="flex:1"><div>结束提示音</div></div>'+
+        '<label class="switch"><input type="checkbox" id="sndSwitch"'+(settings.sound?" checked":"")+'><span class="slider"></span></label></div>'+
+      '<div class="switch-row"><div style="flex:1"><div>桌面通知</div>'+
+        '<div class="tiny muted">番茄钟结束 / 有待复习时提醒</div></div>'+
+        '<label class="switch"><input type="checkbox" id="ntfSwitch"'+(settings.notify?" checked":"")+'><span class="slider"></span></label></div>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>🎯</span><b>每日目标</b></div>'+
+      stepRow("每日练习题目数","reviews",settings.goal.reviews,"道","今日复习页环形进度的分母","goal",5)+
+      stepRow("每日专注时长","focusMin",settings.goal.focusMin,"分钟","番茄钟面板进度条的分母","goal",10)+
+      '<div class="tiny muted">今日已完成 '+todayLog().reviews+' 道 · 专注 '+todayLog().focusMin+' 分钟</div>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>📚</span><b>复习科目</b></div>'+
+      '<div class="tiny muted" style="margin-bottom:10px">自定义科目会出现在新增错题的科目候选里，也可直接输入新科目（保存时自动加入）。</div>'+
+      '<div class="row" style="margin-bottom:10px">'+
+        '<input class="input" id="subjInput" placeholder="输入科目名，如：高等数学" style="flex:1">'+
+        '<button class="btn primary" data-act="add-subject">添加</button>'+
+      '</div>'+
+      '<div class="tagw">'+
+        ((settings.subjects||[]).length?settings.subjects.map(function(s){
+          return '<span class="subj-chip" data-act="del-subject" data-v="'+esc(s)+'" title="点击删除">'+esc(s)+' <span class="x">✕</span></span>';
+        }).join(""):'<span class="tiny muted">还没有自定义科目</span>')+
+      '</div>'+
+      '<div class="divider"></div>'+
+      '<div class="tiny muted" style="margin-bottom:8px">快速添加常用科目</div>'+
+      '<div class="row wrap">'+["数学","英语","语文","物理","化学","生物","政治","历史","地理","高等数学","线性代数","概率论","专业课","计算机"]
+        .map(function(s){return '<button class="btn sm" data-act="add-subject" data-v="'+s+'">'+s+'</button>';}).join("")+'</div>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>🎧</span><b>环境音</b></div>'+
+      '<div class="tiny muted" style="margin-bottom:8px">Web Audio 实时合成，无需外部音频文件</div>'+
+      '<div class="row wrap">'+
+        '<button class="btn sm '+(settings.noise===""?"primary":"")+'" data-act="noise" data-v="">关闭</button>'+
+        '<button class="btn sm '+(settings.noise==="white"?"primary":"")+'" data-act="noise" data-v="white">白噪音</button>'+
+        '<button class="btn sm '+(settings.noise==="rain"?"primary":"")+'" data-act="noise" data-v="rain">雨声</button>'+
+        '<button class="btn sm '+(settings.noise==="brown"?"primary":"")+'" data-act="noise" data-v="brown">低频嗡鸣</button>'+
+      '</div>'+
+      '<div style="margin-top:10px"><label class="tiny muted">音量</label>'+
+        '<input type="range" id="noiseVol" min="1" max="100" value="'+Math.round(noiseVol*100)+'"></div>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>💾</span><b>存储与备份</b></div>'+
+      '<div class="tiny muted" style="margin-bottom:10px">数据存在浏览器自己的沙箱里，网页拿不到真实的磁盘目录写入权限；但可以改下面的「命名空间 / 数据库名 / Store 名」，也可以把备份直接写进你选的文件夹。</div>'+
+      '<div class="field"><label>当前存储位置</label>'+
+        '<div class="mono" style="border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--glass2);font-size:12px;line-height:1.75;word-break:break-all">'+
+          '文本 · localStorage 键：'+esc(nsPrefix)+'items / '+esc(nsPrefix)+'settings / '+esc(nsPrefix)+'log / '+esc(nsPrefix)+'ach / '+esc(nsPrefix)+'timer'+
+          '<br>图片 · IndexedDB：'+esc(settings.dbName)+' / '+esc(settings.dbStore)+
+          (settings.imgBackend==="ls"?'（后端已切到 localStorage base64）':'')+
+        '</div>'+
+        '<button class="btn sm" style="margin-top:8px" data-act="copy" data-copy="localStorage 前缀 '+nsPrefix+' | IndexedDB '+settings.dbName+'/'+settings.dbStore+'">复制位置信息</button>'+
+      '</div>'+
+      '<div id="usageBox" class="tiny muted" style="margin-bottom:12px">占用统计计算中…</div>'+
+      '<div class="divider"></div>'+
+      '<div class="field"><label>文本命名空间（localStorage 键前缀）</label>'+
+        '<div class="row"><input class="input" id="nsInput" value="'+esc(nsPrefix)+'" style="flex:1">'+
+          '<button class="btn primary" data-act="set-ns">应用并迁移</button></div>'+
+        '<div class="tiny muted" style="margin-top:6px">改前缀等于换一个数据文件夹，同一浏览器里可以同时存在多套数据（例如 en_ / kaoyan_ / qimo_）。只允许字母、数字、下划线。</div></div>'+
+      '<div class="field"><label>图片库名 / Store 名（IndexedDB）</label>'+
+        '<div class="row wrap">'+
+          '<input class="input" id="dbNameInput" value="'+esc(settings.dbName)+'" placeholder="数据库名" style="flex:1;min-width:120px">'+
+          '<input class="input" id="dbStoreInput" value="'+esc(settings.dbStore)+'" placeholder="store 名" style="flex:1;min-width:100px">'+
+          '<button class="btn primary" data-act="set-db">应用并迁移</button></div></div>'+
+      '<div class="field"><label>图片存储后端</label>'+
+        '<div class="row wrap">'+
+          '<button class="btn sm '+(settings.imgBackend==="idb"?"primary":"")+'" data-act="img-backend" data-v="idb">IndexedDB（推荐）</button>'+
+          '<button class="btn sm '+(settings.imgBackend==="ls"?"primary":"")+'" data-act="img-backend" data-v="ls">localStorage(base64)</button>'+
+        '</div>'+
+        '<div class="tiny muted" style="margin-top:6px">'+
+          (idbOK?'当前环境支持 IndexedDB，图片以 Blob 存放，容量大。':'⚠️ 当前环境不支持 IndexedDB（常见于双击打开的 file:// 页面），图片会自动降级到 localStorage。')+'</div></div>'+
+      '<div class="divider"></div>'+
+      '<div class="field"><label>备份到我自己选的文件夹</label>'+
+        '<div class="row wrap">'+
+          '<button class="btn sm" data-act="pick-dir">📁 选择文件夹</button>'+
+          '<button class="btn sm" data-act="backup-dir"'+(dirHandle?"":" disabled")+'>⬆️ 立即备份</button>'+
+        '</div>'+
+        '<div class="tiny muted" style="margin-top:6px">'+
+          (fsSupported()?(dirHandle?('已绑定：'+esc(settings.dirName||"文件夹")+' · 备份文件名「错题备份_日期.json」'):'未绑定。选中后浏览器会记住这个文件夹，下次打开仍可直接写入。'):'当前环境不支持（需电脑版 Chrome / Edge，且通过 https 或 localhost 打开）。请改用下面的「完整备份」下载到默认下载目录。')+
+        '</div>'+
+        '<div class="switch-row" style="margin-top:4px"><div style="flex:1"><div>保存错题时自动备份</div>'+
+          '<div class="tiny muted">已绑定文件夹后生效，最多每分钟写一次</div></div>'+
+          '<label class="switch"><input type="checkbox" id="autoBkSwitch"'+(settings.autoBackup?" checked":"")+'><span class="slider"></span></label></div>'+
+      '</div>'+
+      '<div class="divider"></div>'+
+      '<button class="btn block" data-act="backup-export" style="margin-bottom:8px">💾 完整备份（含图片）</button>'+
+      '<label class="btn block" style="margin-bottom:8px">♻️ 从备份恢复<input type="file" accept=".json,application/json" id="restoreFile" hidden></label>'+
+      '<details style="margin-top:10px"><summary class="tiny muted" style="cursor:pointer">这些数据实际存在磁盘的哪个文件里？</summary>'+
+        '<div class="tiny muted" style="margin-top:8px;line-height:1.8">'+
+          '· Chrome（Windows）：<span class="mono">%LOCALAPPDATA%\\Google\\Chrome\\User Data\\&lt;配置&gt;\\Local Storage\\leveldb</span>（localStorage）、<span class="mono">…\\IndexedDB\\</span>（IndexedDB，按来源分子目录）<br>'+
+          '· Edge（Windows）：<span class="mono">%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\&lt;配置&gt;\\…</span><br>'+
+          '· Firefox（Windows）：<span class="mono">%APPDATA%\\Mozilla\\Firefox\\Profiles\\&lt;配置&gt;\\storage\\default\\&lt;来源&gt;\\</span>（ls 子目录 = localStorage，idb 子目录 = IndexedDB）<br>'+
+          '· Safari（macOS）：<span class="mono">~/Library/Safari/LocalStorage/</span>、<span class="mono">~/Library/WebKit/</span><br>'+
+          '· 最快的查看方式：按 F12 →「应用 / Application」→ 存储（Storage）。<br>'+
+          '· 这些文件是 LevelDB / SQLite 二进制，<b>直接手改或删除可能损坏整个浏览器数据</b>，建议用上面的备份与恢复。'+
+        '</div></details>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>🗂️</span><b>数据管理</b></div>'+
+      '<div class="tiny muted" style="margin-bottom:10px">文本存 localStorage，图片存 IndexedDB（errorNotebook / images）。导出仅含文本，不含图片。</div>'+
+      '<button class="btn block" data-act="export" style="margin-bottom:8px">⬇️ 导出数据为 JSON</button>'+
+      '<button class="btn block" data-act="export-md" style="margin-bottom:8px">📝 导出复习清单（Markdown）</button>'+
+      '<label class="btn block" style="margin-bottom:8px">📥 导入 JSON<input type="file" accept=".json,application/json" id="importFile" hidden></label>'+
+      '<button class="btn block danger" data-act="clear">🗑️ 清空全部数据</button>'+
+    '</div>'+
+    '<div class="card"><div class="card-h"><span>🔌</span><b>自定义接口（可选）</b></div>'+
+      '<div class="tiny muted" style="margin-bottom:8px">留空则使用上面的免费接口。可填任意 OpenAI 兼容端点以获得更稳定的分析。</div>'+
+      '<div class="field"><label>Base URL</label><input class="input" id="apiBase" placeholder="https://.../v1" value="'+esc(settings.apiBase)+'"></div>'+
+      '<div class="field"><label>模型名</label><input class="input" id="apiModel" placeholder="如 gpt-4o-mini" value="'+esc(settings.apiModel)+'"></div>'+
+      '<div class="field"><label>API Key（仅保存在本机）</label><input class="input" id="apiKey" placeholder="可留空" value="'+esc(settings.apiKey)+'"></div>'+
+      '<button class="btn primary block" data-act="save-api">保存接口设置</button>'+
+    '</div>'+
+    (idbOK?'':'<div class="card small" style="color:var(--orange)">⚠️ 当前环境不支持 IndexedDB（常见于直接双击打开的 file:// 页面），图片已降级保存到 localStorage，容量有限。建议用本地服务器打开本文件。</div>')+
+    '<div class="card small muted">复习间隔：0 / 1 / 3 / 7 / 15 / 30 天。答对升一级，答错归零并明天再来。</div>';
+
+  $("#aiSwitch").addEventListener("change",function(e){settings.aiEnabled=e.target.checked;saveSettings();
+    toast(settings.aiEnabled?"已开启 AI 错题分析":"已关闭 AI 错题分析");});
+  $("#sndSwitch").addEventListener("change",function(e){settings.sound=e.target.checked;saveSettings();});
+  $("#ntfSwitch").addEventListener("change",function(e){settings.notify=e.target.checked;saveSettings();
+    if(e.target.checked)ensureNotify();});
+  var si=$("#subjInput");
+  if(si)si.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();addSubjectFromInput();}});
+  var nv=$("#noiseVol");
+  nv.addEventListener("input",function(e){noiseVol=Math.max(0.01,Math.min(1,e.target.value/100));if(noiseGain)noiseGain.gain.value=noiseVol*0.6;});
+  var imp=$("#importFile");
+  imp.addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];e.target.value="";if(f)importJson(f);});
+  var rf=$("#restoreFile");
+  if(rf)rf.addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];e.target.value="";if(f)importBackup(f);});
+  var ab=$("#autoBkSwitch");
+  if(ab)ab.addEventListener("change",function(e){
+    settings.autoBackup=e.target.checked;saveSettings();
+    if(e.target.checked){toast("已开启自动备份");maybeAutoBackup();}
+  });
+  updateUsageBox();
+}
+function updateUsageBox(){
+  var box=$("#usageBox");if(!box)return;
+  var lu=lsUsage();
+  var inLs=(settings.imgBackend==="ls"||!idbOK);
+  var show=function(img){
+    box.innerHTML='文本 '+fmtBytes(lu.bytes)+'（'+lu.keys.length+' 个键） · 图片 '+img.count+' 张 / '+fmtBytes(img.bytes)+
+      (inLs?'（存于 localStorage）':'（存于 IndexedDB）');
+  };
+  if(inLs)show(lsImgUsage());
+  else idbUsage().then(show);
+}
+function clampNum(v,min,max,def){v=parseInt(v,10);if(isNaN(v))v=def;return Math.max(min,Math.min(max,v));}
+
+/* ---------- 数值步进器（番茄钟 / 每日目标）---------- */
+var STEPPER={
+  pomo:{work:[1,180,1],short:[1,60,1],long:[1,90,1],longEvery:[2,10,1]},
+  goal:{reviews:[1,500,5],focusMin:[5,960,10]}
+};
+function stepRow(label,key,val,unit,desc,group,step){
+  group=group||"pomo";
+  var lim=(STEPPER[group]&&STEPPER[group][key])||[1,999,1];
+  step=step||lim[2];
+  return '<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)">'+
+    '<div style="flex:1;min-width:0"><div style="font-size:14px">'+esc(label)+'</div>'+
+      (desc?'<div class="tiny muted">'+esc(desc)+'</div>':'')+'</div>'+
+    '<div class="stepper" style="flex:0 0 auto">'+
+      '<button class="btn" data-act="step" data-g="'+group+'" data-k="'+key+'" data-d="-'+step+'" '+(val<=lim[0]?"disabled":"")+'>−</button>'+
+      '<span class="sv" style="min-width:76px">'+val+' '+esc(unit)+'</span>'+
+      '<button class="btn" data-act="step" data-g="'+group+'" data-k="'+key+'" data-d="'+step+'" '+(val>=lim[1]?"disabled":"")+'>＋</button>'+
+    '</div></div>';
+}
+function applyStep(group,key,delta){
+  var lim=(STEPPER[group]&&STEPPER[group][key]);if(!lim)return;
+  var obj=group==="goal"?settings.goal:settings.pomo;
+  obj[key]=Math.max(lim[0],Math.min(lim[1],(parseInt(obj[key],10)||0)+delta));
+  saveSettings();
+  if(group==="pomo"&&!timer.running)timer.remain=pomoDuration(timer.mode);
+  saveTimer();updateFab();
+  renderSettings();
+}
+function addSubjectFromInput(){
+  var el=$("#subjInput");if(!el)return;
+  var v=el.value.trim();
+  if(!v){toast("请输入科目名称");return;}
+  if(addSubject(v))toast("已添加科目："+v);else toast("该科目已存在");
+  renderSettings();
+}
+
+/* =========================================================
+   7. 新增 / 编辑错题
+   ========================================================= */
+function openEditor(id){
+  var it=id?items.filter(function(i){return i.id===id;})[0]:null;
+  draft={id:it?it.id:"",origQKey:it?it.questionImageKey:"",origAKey:it?it.answerImageKey:"",
+    qKey:it?it.questionImageKey:"",aKey:it?it.answerImageKey:"",newKeys:[],removedKeys:[]};
+  aiResult=null;
+  renderEditor(it);
+  $("#modal").classList.remove("hidden");
+}
+function closeEditor(){
+  if(draft&&draft.newKeys.length)draft.newKeys.forEach(function(k){revokeUrl(k);delImage(k);});
+  draft=null;aiResult=null;$("#modal").classList.add("hidden");
+}
+function renderEditor(it){
+  var isEdit=!!it,subs=subjects();
+  $("#modalBox").innerHTML=
+    '<div class="sheet-head"><div class="sheet-title">'+(isEdit?"编辑错题":"新增错题")+'</div>'+
+      '<button class="iconbtn" data-act="close-editor">✕</button></div>'+
+    '<div class="card">'+
+      '<div class="field"><label>科目</label>'+
+        '<input class="input" id="edSubject" list="subjectList" placeholder="如：数学 / 英语" value="'+esc(it?it.subject:"")+'">'+
+        '<datalist id="subjectList">'+subs.map(function(s){return '<option value="'+esc(s)+'"></option>';}).join("")+'</datalist>'+
+        '<div class="row wrap" style="margin-top:8px">'+(subs.length?subs.map(function(s){
+          return '<button class="chip" data-act="pick-subject" data-v="'+esc(s)+'" style="cursor:pointer">'+esc(s)+'</button>';}).join(""):
+          '<span class="tiny muted">还没有科目，可在「设置 → 复习科目」里添加</span>')+'</div>'+
+      '</div>'+
+      '<div class="field"><label>题目简述（必填）</label>'+
+        '<textarea class="textarea" id="edQuestion" placeholder="把题目抄下来，或直接贴图让 AI 读图分析">'+esc(it?it.questionText:"")+'</textarea></div>'+
+      '<div class="field"><label>错因标签（单选）</label>'+
+        '<div class="row wrap" id="tagRow">'+TAGS.map(function(t){
+          var on=it&&it.errorTag===t;
+          return '<button class="chip '+(on?"tag":"")+'" data-act="pick-tag" data-v="'+t+'" style="cursor:pointer">'+t+'</button>';}).join("")+'</div></div>'+
+      '<div class="field"><label>答案简述（选填）</label>'+
+        '<textarea class="textarea" id="edAnswer" placeholder="正确思路或答案">'+esc(it?it.answerText:"")+'</textarea></div>'+
+      '<div class="field"><label>🧭 思路解析（选填，AI 可自动生成）</label>'+
+        '<textarea class="textarea" id="edAnalysis" placeholder="这道题该怎么想？先求什么、用什么方法、关键突破口在哪">'+esc(it?it.analysisText:"")+'</textarea></div>'+
+      '<div class="field" style="margin-bottom:0"><label>📌 涉及知识点（选填，AI 可自动生成）</label>'+
+        '<textarea class="textarea" id="edKnowledge" placeholder="如：二次函数最值、配方法、定义域讨论">'+esc(it?it.knowledgeText:"")+'</textarea></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="field"><label>题目图片</label><div class="imgslot" id="slotQ"></div>'+
+        '<div class="row wrap"><label class="upbtn">🖼️ 选择图片<input type="file" accept="image/*" id="fileQ" hidden></label>'+
+        '<button class="btn danger sm" data-act="del-img" data-slot="q">删除图片</button></div></div>'+
+      '<div class="divider"></div>'+
+      '<div class="field" style="margin-bottom:0"><label>答案图片</label><div class="imgslot" id="slotA"></div>'+
+        '<div class="row wrap"><label class="upbtn">🖼️ 选择图片<input type="file" accept="image/*" id="fileA" hidden></label>'+
+        '<button class="btn danger sm" data-act="del-img" data-slot="a">删除图片</button></div></div>'+
+    '</div>'+
+    '<div class="card" id="aiCard"></div>'+
+    '<div class="row" style="gap:10px;margin-bottom:20px">'+
+      '<button class="btn primary" style="flex:1" data-act="save">保存</button>'+
+      (isEdit?'<button class="btn danger" data-act="delete-item">删除</button>':'')+
+    '</div>';
+  $("#fileQ").addEventListener("change",function(e){onPickFile(e,"q");});
+  $("#fileA").addEventListener("change",function(e){onPickFile(e,"a");});
+  renderSlot("q");renderSlot("a");renderAiCard();
+}
+function renderSlot(slot){
+  var key=slot==="q"?draft.qKey:draft.aKey,box=$("#slot"+slot.toUpperCase());
+  if(!box)return;
+  if(!key){box.innerHTML='<div class="tiny muted" style="padding:6px 0">未上传图片</div>';return;}
+  var u=urlCache.get(key);
+  if(!u){box.innerHTML='<div class="tiny muted" style="padding:6px 0">加载中…</div>';
+    resolveUrl(key).then(function(x){urlCache.set(key,x);renderSlot(slot);});return;}
+  box.innerHTML='<div class="prev"><img src="'+u+'" data-act="zoom" data-src="'+u+'" alt="图片"></div>';
+}
+function onPickFile(e,slot){
+  var f=e.target.files&&e.target.files[0];e.target.value="";
+  if(!f)return;
+  if(!/^image\//.test(f.type||"")){toast("请选择图片文件");return;}
+  toast("正在压缩图片…");
+  compressImage(f,1280,0.8).then(putImage).then(function(key){
+    var old=slot==="q"?draft.qKey:draft.aKey;
+    if(old){draft.removedKeys.push(old);revokeUrl(old);}
+    if(slot==="q")draft.qKey=key;else draft.aKey=key;
+    draft.newKeys.push(key);
+    renderSlot(slot);toast("图片已就绪（最长边 1280 / JPEG 0.8）");
+  }).catch(function(err){toast("图片处理失败："+(err&&err.message?err.message:"未知错误"));});
+}
+function delSlotImage(slot){
+  var old=slot==="q"?draft.qKey:draft.aKey;
+  if(!old){toast("当前没有图片");return;}
+  draft.removedKeys.push(old);revokeUrl(old);
+  if(slot==="q")draft.qKey="";else draft.aKey="";
+  renderSlot(slot);
+}
+function saveEditor(){
+  var q=$("#edQuestion").value.trim();
+  if(!q&&!draft.qKey){toast("题目简述不能为空（也可只上传题目图片）");$("#edQuestion").focus();return;}
+  var subject=$("#edSubject").value.trim(),answer=$("#edAnswer").value.trim(),tag="";
+  var analysis=$("#edAnalysis")?$("#edAnalysis").value.trim():"";
+  var knowledge=$("#edKnowledge")?$("#edKnowledge").value.trim():"";
+  $$("#tagRow .chip").forEach(function(b){if(b.classList.contains("tag"))tag=b.getAttribute("data-v");});
+  if(subject)addSubject(subject);   /* 新科目自动纳入自定义科目表 */
+  var it=draft.id?items.filter(function(i){return i.id===draft.id;})[0]:null;
+  if(it){
+    it.subject=subject;it.questionText=q;it.answerText=answer;it.errorTag=tag;
+    it.analysisText=analysis;it.knowledgeText=knowledge;
+    it.questionImageKey=draft.qKey;it.answerImageKey=draft.aKey;
+  }else{
+    items.push(normalize({id:uid(),subject:subject,questionText:q,answerText:answer,
+      analysisText:analysis,knowledgeText:knowledge,errorTag:tag,
+      questionImageKey:draft.qKey,answerImageKey:draft.aKey,intervalIndex:0,
+      nextReviewDate:todayStr(),reviewCount:0,passCount:0}));
+    todayLog().added++;saveLog();
+  }
+  draft.removedKeys.forEach(function(k){revokeUrl(k);delImage(k);});
+  draft.newKeys=[];draft.removedKeys=[];
+  saveItems();draft=null;aiResult=null;$("#modal").classList.add("hidden");
+  toast(it?"已保存修改":"已新增错题");checkAch();render();
+}
+function deleteItem(){
+  var it=items.filter(function(i){return i.id===draft.id;})[0];
+  if(!it)return;
+  if(!confirm("确定删除这道错题吗？相关图片也会一并删除，且不可恢复。"))return;
+  revokeUrl(it.questionImageKey);delImage(it.questionImageKey);
+  revokeUrl(it.answerImageKey);delImage(it.answerImageKey);
+  draft.newKeys.forEach(function(k){revokeUrl(k);delImage(k);});
+  draft.removedKeys.forEach(function(k){revokeUrl(k);delImage(k);});
+  items=items.filter(function(i){return i.id!==it.id;});
+  saveItems();draft=null;aiResult=null;$("#modal").classList.add("hidden");
+  toast("已删除");render();
+}
+
+/* =========================================================
+   8. AI 错题分析（文字 + 图片多模态）
+   ========================================================= */
+var TEXT_API="https://text.pollinations.ai/openai", TEXT_MODEL="openai-fast";
+var VISION_API="https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions", VISION_MODEL="Qwen2.5-VL-72B-Instruct";
+
+function renderAiCard(){
+  var box=$("#aiCard");if(!box)return;
+  if(!settings.aiEnabled){box.innerHTML='<div class="tiny muted">AI 错题分析已关闭，可在「设置」中开启。</div>';return;}
+  box.innerHTML='<div style="font-weight:800;margin-bottom:6px">🤖 AI 错题分析</div>'+
+    '<div class="tiny muted" style="margin-bottom:8px">会同时参考「题目简述」与「题目图片」（有图时自动读图）；没有图片则只做文字分析。</div>'+
+    '<button class="btn block" id="aiBtn" data-act="ai">✨ 分析这道错题</button>'+
+    '<div id="aiOut"></div>';
+  if(aiResult)renderAiResult();
+}
+function renderAiResult(){
+  var out=$("#aiOut");if(!out||!aiResult)return;
+  if(aiResult.raw){
+    out.innerHTML='<div class="ai-result"><div class="tiny" style="color:var(--orange);font-weight:700">⚠️ AI返回格式异常，以下为原始内容</div>'+
+      '<div style="margin-top:6px;white-space:pre-wrap;word-break:break-word">'+esc(aiResult.raw)+'</div></div>';return;
+  }
+  var r=aiResult.data;
+  out.innerHTML='<div class="ai-result">'+
+    (aiResult.mode?'<div class="tiny muted" style="margin-bottom:8px">'+esc(aiResult.mode)+'</div>':'')+
+    '<div class="ai-line"><span class="ai-k">答案</span>'+esc(r.answer||"（未返回）")+'</div>'+
+    '<div class="divider"></div>'+
+    '<div class="ai-block" style="border-left:3px solid var(--cyan);padding-left:10px;margin:10px 0">'+
+      '<span class="ai-k" style="color:var(--cyan)">🧭 思路解析</span>'+
+      '<div style="white-space:pre-wrap;word-break:break-word;line-height:1.65">'+esc(r.analysis||"（未返回）")+'</div></div>'+
+    '<div class="ai-block" style="border-left:3px solid var(--accent);padding-left:10px;margin:10px 0">'+
+      '<span class="ai-k" style="color:var(--accent)">📌 涉及知识点</span>'+
+      '<div style="white-space:pre-wrap;word-break:break-word;line-height:1.65">'+esc(r.knowledge||"（未返回）")+'</div></div>'+
+    '<div class="divider"></div>'+
+    '<div class="ai-line"><span class="ai-k">最可能的错因</span>'+esc(r.errorTag||"（未返回）")+'</div>'+
+    '<div class="ai-line"><span class="ai-k">错因说明</span>'+esc(r.reason||"（未返回）")+'</div>'+
+    '<div class="ai-line"><span class="ai-k">下一步建议</span>'+esc(r.suggestion||"（未返回）")+'</div>'+
+    '<button class="btn primary block" data-act="ai-fill" style="margin-top:10px">一键填入（答案 / 解析 / 知识点 / 标签）</button></div>';
+}
+function aiPrompt(q,subject){
+  return "你是错题分析助手。根据下面提供的题目内容（可能包含题干文字和题目图片），给出答案、完整的解题思路解析、本题涉及的知识点、最可能的错因和下一步建议。"+
+   "只输出JSON，不要解释，不要代码块，键名与结构严格如下："+
+   "{\"answer\":\"答案\",\"analysis\":\"思路解析：从已知条件出发怎么一步步想到答案，讲清关键突破口、所用方法与易错点，200-400字\","+
+   "\"knowledge\":\"本题涉及的知识点，用顿号分隔，≤60字\",\"errorTag\":\"手滑/概念不清/没思路/公式记错/计算失误之一\","+
+   "\"reason\":\"错因说明≤40字\",\"suggestion\":\"下一步建议≤40字\"}。"+
+   "科目："+(subject||"未填写")+"。题目内容："+(q||"（仅提供图片，请先从图中识别题目）");
+}
+function parseAiJson(text){
+  if(!text)return null;
+  var t=String(text).trim();
+  t=t.replace(/^```(?:json)?/i,"").replace(/```$/i,"").trim();
+  t=t.replace(/```json/gi,"").replace(/```/g,"").trim();
+  try{var o=JSON.parse(t);if(o&&typeof o==="object")return o;}catch(e){}
+  var m=t.match(/\{[\s\S]*\}/);
+  if(m){try{var o2=JSON.parse(m[0]);if(o2&&typeof o2==="object")return o2;}catch(e){}}
+  return null;
+}
+function callOpenAI(apiUrl,model,messages,timeoutMs){
+  var ctrl=(typeof AbortController!=="undefined")?new AbortController():null;
+  var timer=setTimeout(function(){if(ctrl)ctrl.abort();},timeoutMs||45000);
+  var headers={"Content-Type":"application/json"};
+  if(settings.apiKey)headers.Authorization="Bearer "+settings.apiKey;
+  return fetch(apiUrl,{method:"POST",headers:headers,
+      body:JSON.stringify({model:model,messages:messages,max_tokens:700}),
+      signal:ctrl?ctrl.signal:undefined})
+    .then(function(r){
+      if(!r.ok)return r.text().then(function(t){throw new Error("HTTP "+r.status+" "+String(t).slice(0,120));});
+      return r.text();})
+    .then(function(text){clearTimeout(timer);return text;})
+    .catch(function(e){clearTimeout(timer);throw e;});
+}
+function extractContent(text){
+  try{
+    var j=JSON.parse(text);
+    if(j&&j.choices&&j.choices[0]){
+      var c=j.choices[0].message||j.choices[0];
+      if(typeof c.content==="string")return c.content;
+      if(typeof c.text==="string")return c.text;
+    }
+    if(j&&typeof j.content==="string")return j.content;
+    if(j&&typeof j.message==="string")return j.message;
+  }catch(e){}
+  return text;
+}
+function runAi(){
+  if(!draft)return;
+  var btn=$("#aiBtn"),out=$("#aiOut");
+  var q=$("#edQuestion").value.trim(),subject=$("#edSubject").value.trim();
+  if(!q&&!draft.qKey){toast("请先填写题目简述或上传题目图片");$("#edQuestion").focus();return;}
+  btn.disabled=true;btn.textContent="分析中…";
+  if(out)out.innerHTML='<div class="tiny muted" style="margin-top:8px">正在请求免费 AI 服务…</div>';
+  aiResult=null;
+
+  var useCustom=!!(settings.apiBase&&settings.apiModel);
+  var apiUrl=useCustom?settings.apiBase.replace(/\/$/,"")+"/chat/completions":VISION_API;
+  var model=useCustom?settings.apiModel:VISION_MODEL;
+
+  imageToDataUrl(draft.qKey).then(function(dataUrl){
+    var content=[{type:"text",text:aiPrompt(q,subject)}];
+    if(dataUrl)content.push({type:"image_url",image_url:{url:dataUrl}});
+    return callOpenAI(apiUrl,model,[{role:"user",content:dataUrl?content:aiPrompt(q,subject)}],60000)
+      .then(function(text){
+        var body=extractContent(text),data=parseAiJson(body);
+        aiResult=data?{data:data,mode:dataUrl?"🤖 已结合题目图片分析":"🤖 文字分析"}:{raw:String(body).slice(0,900)};
+        finishAi(btn);
+      });
+  }).catch(function(){
+    /* 视觉接口繁忙/失败 → 降级为纯文字接口 */
+    if(useCustom){failAi(btn,out);return;}
+    callOpenAI(TEXT_API,TEXT_MODEL,[{role:"user",content:aiPrompt(q,subject)}],45000)
+      .then(function(text){
+        var body=extractContent(text),data=parseAiJson(body);
+        aiResult=data?{data:data,mode:"⚠️ 读图接口繁忙，已改为纯文字分析"}:{raw:String(body).slice(0,900)};
+        finishAi(btn);
+      })
+      .catch(function(){failAi(btn,out);});
+  });
+}
+function finishAi(btn){
+  if(btn){btn.disabled=false;btn.textContent="✨ 重新分析";}
+  ach.__ai=1;saveAch();checkAch();
+  renderAiResult();
+}
+function failAi(btn,out){
+  if(btn){btn.disabled=false;btn.textContent="✨ 分析这道错题";}
+  if(out)out.innerHTML='<div class="tiny" style="color:var(--bad);margin-top:8px">免费AI服务暂时不可用，请稍后重试或手动填写。</div>';
+  toast("免费AI服务暂时不可用，请稍后重试或手动填写。");
+}
+function fillAi(){
+  if(!aiResult||!aiResult.data)return;
+  var r=aiResult.data,filled=[];
+  if(r.answer){$("#edAnswer").value=String(r.answer);filled.push("答案");}
+  if(r.analysis&&$("#edAnalysis")){$("#edAnalysis").value=String(r.analysis);filled.push("思路解析");}
+  if(r.knowledge&&$("#edKnowledge")){$("#edKnowledge").value=String(r.knowledge);filled.push("知识点");}
+  var tag=TAGS.indexOf(r.errorTag)>=0?r.errorTag:"";
+  if(!tag&&r.errorTag)TAGS.forEach(function(t){if(String(r.errorTag).indexOf(t)>=0)tag=t;});
+  if(tag){$$("#tagRow .chip").forEach(function(b){b.classList.toggle("tag",b.getAttribute("data-v")===tag);});filled.push("标签");}
+  toast(filled.length?("已填入："+filled.join(" · ")):"AI 未返回可填入的内容");
+}
+
+/* =========================================================
+   9. 番茄钟
+   ========================================================= */
+var timer={mode:"work",endsAt:0,running:false,remain:0,round:0};
+function pomoDuration(mode){
+  if(mode==="work")return settings.pomo.work*60;
+  if(mode==="short")return settings.pomo.short*60;
+  return settings.pomo.long*60;
+}
+function loadTimer(){
+  try{var t=JSON.parse(localStorage.getItem(K("timer"))||"{}");
+    if(t&&t.mode){timer.mode=t.mode;timer.running=!!t.running;timer.endsAt=t.endsAt||0;timer.round=t.round||0;}}catch(e){}
+  if(!timer.running)timer.remain=pomoDuration(timer.mode);
+}
+function saveTimer(){try{localStorage.setItem(K("timer"),JSON.stringify(timer));}catch(e){}}
+function resetPomo(){
+  timer.running=false;timer.endsAt=0;timer.remain=pomoDuration(timer.mode);saveTimer();updateFab();
+}
+function startPomo(){
+  timer.endsAt=Date.now()+timer.remain*1000;timer.running=true;saveTimer();updateFab();
+  toast(timer.mode==="work"?"🍅 专注开始":(timer.mode==="short"?"☕ 短休开始":"🛋️ 长休开始"));
+}
+function pausePomo(){
+  if(!timer.running)return;
+  timer.remain=Math.max(0,Math.round((timer.endsAt-Date.now())/1000));
+  timer.running=false;saveTimer();updateFab();toast("已暂停");
+}
+function currentRemain(){
+  return timer.running?Math.max(0,Math.round((timer.endsAt-Date.now())/1000)):(timer.remain||pomoDuration(timer.mode));
+}
+function tickPomo(){
+  if(timer.running){
+    var left=Math.round((timer.endsAt-Date.now())/1000);
+    timer.remain=Math.max(0,left);
+    if(left<=0)completePomo();
+  }
+  updateFab();
+  var pt=$("#pomoTime");if(pt)pt.textContent=mmss(currentRemain());
+}
+function completePomo(){
+  var wasWork=timer.mode==="work";
+  if(wasWork){
+    timer.round++;
+    var L=todayLog();L.pomo++;L.focusMin+=settings.pomo.work;saveLog();
+  }
+  timer.running=false;
+  timer.mode=wasWork?((timer.round%settings.pomo.longEvery===0)?"long":"short"):"work";
+  timer.remain=pomoDuration(timer.mode);
+  saveTimer();
+  beep(wasWork?880:660,0.5);
+  notify(wasWork?"🍅 番茄钟完成":"☕ 休息结束",wasWork?("专注 "+settings.pomo.work+" 分钟达成，休息一下吧"):"回到座位，继续下一轮");
+  toast(wasWork?"🍅 番茄钟完成！休息一下":"休息结束，开始专注",true);
+  checkAch();
+  if($("#pomoTime"))renderPomoPanel();
+  if(view==="today"||view==="stats")render();
+}
+function updateFab(){
+  var fab=$("#pomoFab");if(!fab)return;
+  $("#pomoFabTime").textContent=mmss(currentRemain());
+  $("#pomoFabIcon").textContent=timer.mode==="work"?"🍅":(timer.mode==="short"?"☕":"🛋️");
+  fab.classList.toggle("running",timer.running&&timer.mode==="work");
+  fab.classList.toggle("rest",timer.mode!=="work");
+}
+function openPomo(){renderPomoPanel();$("#modal").classList.remove("hidden");}
+function renderPomoPanel(){
+  var L=todayLog();
+  var fpct=Math.min(100,Math.round(L.focusMin/settings.goal.focusMin*100));
+  $("#modalBox").innerHTML=
+    '<div class="sheet-head"><div class="sheet-title">🍅 番茄钟</div>'+
+      '<button class="iconbtn" data-act="close-pomo">✕</button></div>'+
+    '<div class="card" style="text-align:center">'+
+      '<div class="tiny muted" style="letter-spacing:2px">'+(timer.mode==="work"?"专注":(timer.mode==="short"?"短休":"长休"))+'</div>'+
+      '<div class="pomo-time mono" id="pomoTime">'+mmss(currentRemain())+'</div>'+
+      '<div class="pomo-modes">'+
+        '<button class="btn sm '+(timer.mode==="work"?"on":"")+'" data-act="pmode" data-v="work">专注</button>'+
+        '<button class="btn sm '+(timer.mode==="short"?"on":"")+'" data-act="pmode" data-v="short">短休</button>'+
+        '<button class="btn sm '+(timer.mode==="long"?"on":"")+'" data-act="pmode" data-v="long">长休</button>'+
+      '</div>'+
+      '<div class="row">'+
+        '<button class="btn primary" style="flex:1" data-act="ptoggle">'+
+          (timer.running?"⏸ 暂停":(currentRemain()<pomoDuration(timer.mode)?"▶ 继续":"▶ 开始"))+'</button>'+
+        '<button class="btn" data-act="preset">↺ 重置</button>'+
+        '<button class="btn" data-act="pskip">⏭ 跳过</button>'+
+      '</div>'+
+      '<div class="divider"></div>'+
+      '<div class="row wrap" style="justify-content:center;gap:16px">'+
+        '<div><div style="font-weight:800">'+L.pomo+'</div><div class="tiny muted">今日番茄</div></div>'+
+        '<div><div style="font-weight:800">'+L.focusMin+'</div><div class="tiny muted">今日专注(分)</div></div>'+
+        '<div><div style="font-weight:800">'+timer.round+'</div><div class="tiny muted">本轮计数</div></div>'+
+      '</div>'+
+      '<div class="tiny muted" style="margin-top:10px">今日目标 '+settings.goal.focusMin+' 分钟 · 已完成 '+fpct+'%</div>'+
+      '<div class="bar"><i style="width:'+fpct+'%"></i></div>'+
+    '</div>'+
+    '<div class="card small muted">番茄钟基于时间戳计时，切后台或锁屏也不会走偏。可到「设置」调整时长、提示音与通知。</div>';
+}
+
+/* =========================================================
+   10. 自测模式（Active Recall）
+   ========================================================= */
+var quiz=null;
+function openQuiz(){
+  var pool=items.filter(function(i){return !filterSubject||(i.subject||"未分类")===filterSubject;});
+  if(pool.length===0){toast("没有可自测的错题");return;}
+  pool=pool.slice().sort(function(){return Math.random()-0.5;}).slice(0,Math.min(20,pool.length));
+  quiz={list:pool,idx:0,show:false,done:0};
+  renderQuiz();
+  $("#modal").classList.remove("hidden");
+}
+function renderQuiz(){
+  if(!quiz)return;
+  if(quiz.idx>=quiz.list.length){
+    $("#modalBox").innerHTML='<div class="sheet-head"><div class="sheet-title">🎲 自测完成</div>'+
+      '<button class="iconbtn" data-act="close-quiz">✕</button></div>'+
+      '<div class="card empty"><div class="e-ico">🏁</div><div>本轮共 '+quiz.list.length+' 题，答对 '+quiz.done+' 题</div>'+
+      '<button class="btn primary" style="margin-top:14px" data-act="close-quiz">完成</button></div>';
+    return;
+  }
+  var it=quiz.list[quiz.idx];
+  ensureUrls([it.questionImageKey,it.answerImageKey]).then(function(){
+    var qu=imgUrl(it.questionImageKey),au=imgUrl(it.answerImageKey);
+    $("#modalBox").innerHTML='<div class="sheet-head"><div class="sheet-title">🎲 自测 '+(quiz.idx+1)+' / '+quiz.list.length+'</div>'+
+      '<button class="iconbtn" data-act="close-quiz">✕</button></div>'+
+      '<div class="card">'+
+        '<div class="row wrap"><span class="chip subject">'+esc(it.subject||"未分类")+'</span>'+
+        (it.errorTag?'<span class="chip tag">'+esc(it.errorTag)+'</span>':'')+'</div>'+
+        '<div style="margin-top:10px;font-weight:600;white-space:pre-wrap;word-break:break-word">'+esc(it.questionText)+'</div>'+
+        (qu?'<div class="q-img"><img src="'+qu+'" data-act="zoom" data-src="'+qu+'" alt="题目图片"></div>':'')+
+        (quiz.show?('<div class="answer-box"><div class="tiny muted">答案</div>'+
+          '<div style="white-space:pre-wrap;word-break:break-word">'+(it.answerText?esc(it.answerText):'<span class="muted">（未填写）</span>')+'</div>'+
+          (au?'<div class="q-img"><img src="'+au+'" data-act="zoom" data-src="'+au+'" alt="答案图片"></div>':'')+'</div>'+
+          (it.analysisText?'<div class="answer-box"><div class="tiny" style="color:var(--cyan);font-weight:700">🧭 思路解析</div>'+
+            '<div style="white-space:pre-wrap;word-break:break-word;margin-top:4px">'+esc(it.analysisText)+'</div></div>':'')+
+          (it.knowledgeText?'<div class="answer-box"><div class="tiny" style="color:var(--accent);font-weight:700">📌 涉及知识点</div>'+
+            '<div style="white-space:pre-wrap;word-break:break-word;margin-top:4px">'+esc(it.knowledgeText)+'</div></div>':'')):'')+
+      '</div>'+
+      '<div class="row" style="gap:10px;margin-bottom:20px">'+
+        (quiz.show?'':'<button class="btn" style="flex:1" data-act="qshow">👀 显示答案</button>')+
+        '<button class="btn primary" style="flex:1" data-act="qpass">✅ 会了</button>'+
+        '<button class="btn danger" style="flex:1" data-act="qfail">↻ 还不会</button>'+
+      '</div>';
+  });
+}
+function quizNext(passed){
+  var it=quiz.list[quiz.idx];
+  if(passed){passReview(it);quiz.done++;}else failReview(it);
+  quiz.idx++;quiz.show=false;
+  renderQuiz();
+  checkAch();
+  if(view==="today"||view==="stats")render();
+}
+
+/* =========================================================
+   11. 声音 / 通知 / 环境音
+   ========================================================= */
+var actx=null;
+function audioCtx(){
+  if(!actx){var C=window.AudioContext||window.webkitAudioContext;if(!C)return null;actx=new C();}
+  if(actx.state==="suspended"){try{actx.resume();}catch(e){}}
+  return actx;
+}
+function beep(freq,dur){
+  if(!settings.sound)return;
+  var c=audioCtx();if(!c)return;
+  try{
+    var o=c.createOscillator(),g=c.createGain();
+    o.type="sine";o.frequency.value=freq||880;
+    g.gain.setValueAtTime(0.0001,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25,c.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+(dur||0.4));
+    o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+(dur||0.4)+0.05);
+  }catch(e){}
+}
+function ensureNotify(){
+  if(!settings.notify)return;
+  if(typeof Notification==="undefined")return;
+  if(Notification.permission==="default"){try{Notification.requestPermission();}catch(e){}}
+}
+function notify(title,body){
+  if(!settings.notify)return;
+  if(typeof Notification==="undefined"||Notification.permission!=="granted")return;
+  try{new Notification(title,{body:body});}catch(e){}
+}
+var noiseVol=0.35,noiseSrc=null,noiseGain=null;
+function setNoise(type){
+  settings.noise=type||"";saveSettings();
+  if(!type){stopNoise();return;}
+  var c=audioCtx();if(!c){toast("当前浏览器不支持音频合成");return;}
+  stopNoise();
+  try{
+    var len=c.sampleRate*2,buf=c.createBuffer(1,len,c.sampleRate),d=buf.getChannelData(0),last=0;
+    for(var i=0;i<len;i++){
+      var w=Math.random()*2-1;
+      if(type==="brown"){last=(last+0.02*w)/1.02;d[i]=last*3.2;}
+      else d[i]=w*0.6;
+    }
+    noiseSrc=c.createBufferSource();noiseSrc.buffer=buf;noiseSrc.loop=true;
+    var f=c.createBiquadFilter();
+    if(type==="rain"){f.type="bandpass";f.frequency.value=1100;f.Q.value=0.7;}
+    else if(type==="brown"){f.type="lowpass";f.frequency.value=420;}
+    else{f.type="lowpass";f.frequency.value=9000;}
+    noiseGain=c.createGain();noiseGain.gain.value=noiseVol*0.6;
+    noiseSrc.connect(f);f.connect(noiseGain);noiseGain.connect(c.destination);noiseSrc.start();
+    toast("🎧 环境音已开启："+(type==="white"?"白噪音":(type==="rain"?"雨声":"低频嗡鸣")));
+  }catch(e){toast("环境音启动失败");}
+}
+function stopNoise(){ if(noiseSrc){try{noiseSrc.stop();}catch(e){} noiseSrc=null;noiseGain=null;} }
+
+/* =========================================================
+   12. 数据管理
+   ========================================================= */
+function exportJson(){
+  var data={exportedAt:new Date().toISOString(),note:"仅包含文本数据，不含图片",
+    settings:settings,log:log,achievements:ach,
+    items:items.map(function(i){return {id:i.id,subject:i.subject,questionText:i.questionText,answerText:i.answerText,
+      analysisText:i.analysisText,knowledgeText:i.knowledgeText,
+      errorTag:i.errorTag,questionImageKey:i.questionImageKey,answerImageKey:i.answerImageKey,
+      intervalIndex:i.intervalIndex,nextReviewDate:i.nextReviewDate,reviewCount:i.reviewCount,passCount:i.passCount};})};
+  download("错题数据_"+todayStr()+".json",JSON.stringify(data,null,2));
+  toast("已导出 JSON（不含图片）");
+}
+function exportMd(){
+  var by={};items.forEach(function(i){var s=i.subject||"未分类";(by[s]=by[s]||[]).push(i);});
+  var md="# 错题复习清单（"+todayStr()+"）\n\n";
+  Object.keys(by).sort().forEach(function(s){
+    md+="## "+s+"\n\n";
+    by[s].forEach(function(i,n){
+      md+="### "+(n+1)+". "+(i.questionText||"（无题目文字）")+"\n";
+      if(i.errorTag)md+="- 错因："+i.errorTag+"\n";
+      if(i.answerText)md+="- 答案："+i.answerText+"\n";
+      if(i.analysisText)md+="- 思路解析："+i.analysisText+"\n";
+      if(i.knowledgeText)md+="- 涉及知识点："+i.knowledgeText+"\n";
+      md+="- 下次复习："+i.nextReviewDate+" · 复习 "+(i.passCount+i.reviewCount)+" 次\n\n";
+    });
+  });
+  download("错题清单_"+todayStr()+".md",md,"text/markdown");
+  toast("已导出 Markdown");
+}
+function importJson(file){
+  var fr=new FileReader();
+  fr.onload=function(){
+    try{
+      var d=JSON.parse(fr.result);
+      var arr=Array.isArray(d)?d:(d.items||[]);
+      if(!Array.isArray(arr))throw new Error("bad format");
+      var map={};items.forEach(function(i){map[i.id]=i;});
+      var add=0,upd=0;
+      arr.forEach(function(o){
+        var n=normalize(o);
+        if(map[n.id]){items[items.indexOf(map[n.id])]=n;upd++;}else{items.push(n);add++;}
+      });
+      saveItems();toast("导入完成：新增 "+add+" 条，更新 "+upd+" 条");render();
+    }catch(e){toast("导入失败：文件格式不正确");}
+  };
+  fr.onerror=function(){toast("导入失败：无法读取文件");};
+  fr.readAsText(file);
+}
+/* =========================================================
+   12b. 存储位置管理：统计 / 迁移 / 备份
+   ========================================================= */
+function fmtBytes(n){
+  n=n||0;
+  if(n<1024)return n+" B";
+  if(n<1048576)return (n/1024).toFixed(1)+" KB";
+  return (n/1048576).toFixed(2)+" MB";
+}
+/* localStorage 里属于本应用的所有键（含命名空间指针） */
+function lsUsage(){
+  var total=0,list=[];
+  try{
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k===NS_KEY||k.indexOf(nsPrefix)===0){
+        var v=localStorage.getItem(k)||"";
+        var b=(k.length+v.length)*2;          /* UTF-16 估算 */
+        total+=b;list.push({k:k,b:b});
+      }
+    }
+  }catch(e){}
+  list.sort(function(a,b){return b.b-a.b;});
+  return {bytes:total,keys:list};
+}
+function idbUsage(){
+  if(!useIDB())return Promise.resolve({count:0,bytes:0});
+  return openDB().then(function(db){return new Promise(function(res){
+    if(!db.objectStoreNames.contains(dbStore())){res({count:0,bytes:0});return;}
+    var c=0,b=0,rq=db.transaction(dbStore(),"readonly").objectStore(dbStore()).openCursor();
+    rq.onsuccess=function(){var cur=rq.result;
+      if(cur){c++;var v=cur.value;b+=((v&&v.size)||String(v||"").length)||0;cur.continue();}
+      else res({count:c,bytes:b});};
+    rq.onerror=function(){res({count:c,bytes:b});};
+  });}).catch(function(){return {count:0,bytes:0};});
+}
+function lsImgUsage(){
+  var m={};try{m=fbAll();}catch(e){}
+  var c=0,b=0;
+  Object.keys(m).forEach(function(k){c++;b+=Math.round(String(m[k]).length*0.75);});
+  return {count:c,bytes:b};
+}
+/* ---------- 迁移：localStorage 命名空间（键前缀）---------- */
+function migrateNamespace(next){
+  next=String(next||"").trim();
+  if(!/^[A-Za-z0-9_]{1,24}$/.test(next)){toast("前缀只能用字母、数字、下划线（≤24 字符）");return;}
+  if(next===nsPrefix){toast("前缀没有变化");return;}
+  var keys=["items","settings","log","ach","timer","images_fallback"];
+  var exists=keys.filter(function(k){try{return localStorage.getItem(next+k)!==null;}catch(e){return false;}});
+  if(exists.length&&!confirm("新前缀 "+next+" 下已有 "+exists.length+" 项数据，继续会覆盖它们。确定继续？"))return;
+  var moved=0,old=nsPrefix;
+  keys.forEach(function(k){
+    var v=null;try{v=localStorage.getItem(old+k);}catch(e){}
+    if(v!==null){try{localStorage.setItem(next+k,v);moved++;}catch(e){toast("写入失败，可能是存储空间不足");}}
+  });
+  nsPrefix=next;
+  try{localStorage.setItem(NS_KEY,next);}catch(e){}
+  keys.forEach(function(k){try{localStorage.removeItem(old+k);}catch(e){}});
+  settings=loadSettings();items=loadItems();log=loadLog();ach=loadAch();loadTimer();
+  toast("已迁移 "+moved+" 项到前缀 "+next,true);render();
+}
+/* ---------- 迁移：IndexedDB 库名 / store 名 ---------- */
+function readAllPairs(name,store){
+  return openDBAny(name,store).then(function(db){return new Promise(function(res){
+    var out=[];
+    if(!db.objectStoreNames.contains(store)){try{db.close();}catch(e){} res(out);return;}
+    var rq=db.transaction(store,"readonly").objectStore(store).openCursor();
+    rq.onsuccess=function(){var c=rq.result;
+      if(c){out.push([c.key,c.value]);c.continue();}
+      else{try{db.close();}catch(e){} res(out);}};
+    rq.onerror=function(){try{db.close();}catch(e){} res(out);};
+  });});
+}
+function writeAllPairs(name,store,pairs){
+  return openDBAny(name,store).then(function(db){return new Promise(function(res,rej){
+    var tx=db.transaction(store,"readwrite"),st=tx.objectStore(store);
+    pairs.forEach(function(p){st.put(p[1],p[0]);});
+    tx.oncomplete=function(){try{db.close();}catch(e){} res(pairs.length);};
+    tx.onerror=function(){try{db.close();}catch(e){} rej(tx.error||new Error("写入失败"));};
+  });});
+}
+function migrateDb(newName,newStore){
+  newName=String(newName||"").trim();newStore=String(newStore||"").trim();
+  if(!/^[A-Za-z0-9_]{1,40}$/.test(newName)||!/^[A-Za-z0-9_]{1,40}$/.test(newStore)){
+    toast("名称只能用字母、数字、下划线（≤40 字符）");return;}
+  var oldName=settings.dbName,oldStore=settings.dbStore;
+  if(newName===oldName&&newStore===oldStore){toast("存储位置没有变化");return;}
+  if(!confirm("将把图片从「"+oldName+" / "+oldStore+"」迁移到「"+newName+" / "+newStore+"」，确定继续？"))return;
+  toast("正在迁移图片…");
+  readAllPairs(oldName,oldStore).then(function(pairs){
+    return writeAllPairs(newName,newStore,pairs).then(function(){
+      settings.dbName=newName;settings.dbStore=newStore;saveSettings();
+      return reopenDB().then(function(){return pairs.length;});
+    });
+  }).then(function(n){
+    if(oldName!==newName){try{indexedDB.deleteDatabase(oldName);}catch(e){}}
+    urlCache.forEach(function(u){try{URL.revokeObjectURL(u);}catch(e){}});urlCache.clear();
+    toast("已迁移 "+n+" 张图片到 "+newName+" / "+newStore,true);
+    render();
+  }).catch(function(e){toast("迁移失败："+((e&&e.message)||"未知错误")+"（原数据保留）");});
+}
+/* ---------- 迁移：图片后端 IndexedDB ⇄ localStorage ---------- */
+function putRawImage(key,blob){
+  if(useIDB())return openDB().then(function(db){return new Promise(function(res){
+    var tx=db.transaction(dbStore(),"readwrite");tx.objectStore(dbStore()).put(blob,key);
+    tx.oncomplete=function(){res(key);};tx.onerror=function(){res(key);};});}).catch(function(){return key;});
+  return blobToDataURL(blob).then(function(u){var m=fbAll();m[key]=u;fbSave(m);return key;});
+}
+function dataUrlToBlobSafe(u){
+  try{
+    if(typeof u==="string"&&u.indexOf("data:")===0)return Promise.resolve(dataUrlToBlob(u));
+  }catch(e){}
+  return Promise.resolve(u);
+}
+function migrateImgBackend(to){
+  if(to===settings.imgBackend)return;
+  if(to==="ls"&&!confirm("localStorage 一般只有 5–10MB，图片较多时可能存不下。确定改用 localStorage 存图片？"))return;
+  toast("正在迁移图片…");
+  if(to==="ls"){
+    readAllPairs(dbName(),dbStore()).then(function(pairs){
+      var m={},n=0,bad=0;
+      return Promise.all(pairs.map(function(p){
+        return blobToDataURL(p[1]).then(function(u){m[p[0]]=u;n++;}).catch(function(){bad++;});
+      })).then(function(){
+        if(pairs.length&&n===0){toast("图片转换失败，已取消切换");return;}
+        try{localStorage.setItem(K("images_fallback"),JSON.stringify(m));}
+        catch(e){toast("localStorage 空间不足，未切换");return;}
+        settings.imgBackend="ls";saveSettings();
+        urlCache.forEach(function(u){try{URL.revokeObjectURL(u);}catch(e){}});urlCache.clear();
+        toast(bad?("已迁移 "+n+" 张，"+bad+" 张转换失败仍留在 IndexedDB"):("已把 "+n+" 张图片移到 localStorage"),true);
+        render();
+      });
+    }).catch(function(e){toast("迁移失败："+((e&&e.message)||"未知错误"));});
+  }else{
+    var m2=fbAll(),keys=Object.keys(m2);
+    Promise.all(keys.map(function(k){
+      return dataUrlToBlobSafe(m2[k]).then(function(b){return putRawImage(k,b);});
+    })).then(function(){
+      settings.imgBackend="idb";saveSettings();
+      try{localStorage.removeItem(K("images_fallback"));}catch(e){}
+      urlCache.forEach(function(u){try{URL.revokeObjectURL(u);}catch(e){}});urlCache.clear();
+      reopenDB();toast("已把 "+keys.length+" 张图片移到 IndexedDB",true);render();
+    }).catch(function(e){toast("迁移失败："+((e&&e.message)||"未知错误"));});
+  }
+}
+/* ---------- 完整备份（含图片）---------- */
+function buildBackupObject(){
+  var imgs={},keys=[];
+  items.forEach(function(i){
+    if(i.questionImageKey&&keys.indexOf(i.questionImageKey)<0)keys.push(i.questionImageKey);
+    if(i.answerImageKey&&keys.indexOf(i.answerImageKey)<0)keys.push(i.answerImageKey);
+  });
+  return Promise.all(keys.map(function(k){
+    return (settings.imgBackend==="ls"?Promise.resolve(fbAll()[k]||""):imageToDataUrl(k))
+      .then(function(u){if(u)imgs[k]=u;}).catch(function(){});
+  })).then(function(){
+    return {app:"错题复习提醒器",format:"mtool-backup",version:2,
+      exportedAt:new Date().toISOString(),
+      ns:nsPrefix,dbName:settings.dbName,dbStore:settings.dbStore,imgBackend:settings.imgBackend,
+      settings:settings,log:log,achievements:ach,items:items,images:imgs};
+  });
+}
+function exportBackup(){
+  toast("正在打包备份…");
+  buildBackupObject().then(function(data){
+    download("错题完整备份_"+todayStr()+".json",JSON.stringify(data));
+    toast("已导出完整备份（"+items.length+" 题 / "+Object.keys(data.images).length+" 张图）",true);
+  }).catch(function(){toast("备份失败");});
+}
+function importBackup(file){
+  var fr=new FileReader();
+  fr.onload=function(){
+    var d;
+    try{d=JSON.parse(fr.result);}catch(e){toast("备份文件格式不正确");return;}
+    var arr=d.items||[];
+    if(!Array.isArray(arr)){toast("备份里没有错题数据");return;}
+    var overwrite=confirm("点「确定」= 用备份覆盖当前全部数据；点「取消」= 追加合并到现有错题。");
+    var imgs=d.images||{},ik=Object.keys(imgs);
+    toast("正在恢复 "+ik.length+" 张图片…");
+    Promise.all(ik.map(function(k){
+      return dataUrlToBlobSafe(imgs[k]).then(function(b){return putRawImage(k,b);});
+    })).then(function(){
+      if(overwrite)items=arr.map(normalize);
+      else{var map={};items.forEach(function(i){map[i.id]=1;});
+        arr.forEach(function(o){var n=normalize(o);if(!map[n.id])items.push(n);});}
+      if(d.settings&&typeof d.settings==="object"){
+        Object.keys(d.settings).forEach(function(k){
+          if(["dbName","dbStore","imgBackend","subjects"].indexOf(k)<0)settings[k]=d.settings[k];
+        });
+      }
+      if(d.log&&typeof d.log==="object")log=d.log;
+      if(d.achievements&&typeof d.achievements==="object")ach=d.achievements;
+      saveItems();saveSettings();saveLog();saveAch();
+      urlCache.forEach(function(u){try{URL.revokeObjectURL(u);}catch(e){}});urlCache.clear();
+      toast("恢复完成："+items.length+" 题 / "+ik.length+" 张图",true);render();
+    }).catch(function(e){toast("恢复失败："+((e&&e.message)||"未知错误"));});
+  };
+  fr.onerror=function(){toast("无法读取备份文件");};
+  fr.readAsText(file);
+}
+/* ---------- 备份到自定义文件夹（File System Access API）---------- */
+var dirHandle=null;
+var SYS_DB="__mtool_sys", SYS_STORE="kv";
+function sysDB(){return openDBAny(SYS_DB,SYS_STORE);}
+function sysSet(k,v){
+  return sysDB().then(function(db){return new Promise(function(res){
+    var tx=db.transaction(SYS_STORE,"readwrite");tx.objectStore(SYS_STORE).put(v,k);
+    tx.oncomplete=function(){try{db.close();}catch(e){} res();};
+    tx.onerror=function(){try{db.close();}catch(e){} res();};});}).catch(function(){});
+}
+function sysGet(k){
+  return sysDB().then(function(db){return new Promise(function(res){
+    var rq=db.transaction(SYS_STORE,"readonly").objectStore(SYS_STORE).get(k);
+    rq.onsuccess=function(){try{db.close();}catch(e){} res(rq.result||null);};
+    rq.onerror=function(){try{db.close();}catch(e){} res(null);};});}).catch(function(){return null;});
+}
+function fsSupported(){return typeof window.showDirectoryPicker==="function";}
+function pickBackupDir(){
+  if(!fsSupported()){toast("当前浏览器不支持自定义文件夹（需电脑版 Chrome/Edge 且通过 https 或 localhost 打开）");return;}
+  window.showDirectoryPicker({id:"mtool-backup",mode:"readwrite"}).then(function(h){
+    dirHandle=h;sysSet("dir",h);
+    settings.dirName=h.name||"已选文件夹";saveSettings();
+    toast("已绑定备份文件夹："+settings.dirName,true);
+    if(view==="settings")renderSettings();
+  }).catch(function(e){if(!e||e.name!=="AbortError")toast("选择失败："+((e&&e.message)||"未知"));});
+}
+function dirPermission(){
+  if(!dirHandle)return Promise.resolve(false);
+  try{
+    if(dirHandle.queryPermission){
+      return dirHandle.queryPermission({mode:"readwrite"}).then(function(p){
+        if(p==="granted")return true;
+        return dirHandle.requestPermission({mode:"readwrite"}).then(function(p2){return p2==="granted";});
+      });
+    }
+  }catch(e){}
+  return Promise.resolve(true);
+}
+function backupToDir(auto){
+  if(!dirHandle){toast("还没有绑定备份文件夹");return Promise.resolve();}
+  return dirPermission().then(function(ok){
+    if(!ok){if(!auto)toast("文件夹权限已失效，请重新选择");return null;}
+    return buildBackupObject().then(function(data){
+      var name="错题备份_"+todayStr()+".json";
+      return dirHandle.getFileHandle(name,{create:true}).then(function(fh){
+        return fh.createWritable().then(function(ws){
+          return ws.write(JSON.stringify(data)).then(function(){return ws.close();});
+        });
+      }).then(function(){if(!auto)toast("已备份到 "+settings.dirName+" / "+name,true);return true;});
+    });
+  }).catch(function(e){if(!auto)toast("备份失败："+((e&&e.message)||"未知错误"));return false;});
+}
+var lastAutoBackup=0;
+function maybeAutoBackup(){
+  if(!settings.autoBackup||!dirHandle)return;
+  var now=Date.now();
+  if(now-lastAutoBackup<60000)return;
+  lastAutoBackup=now;
+  backupToDir(true);
+}
+
+function clearAll(){
+  if(!confirm("确定清空全部数据吗？所有错题、图片与统计都会被删除！"))return;
+  if(!confirm("最后确认：此操作不可恢复，确定继续？"))return;
+  items=[];saveItems();
+  settings.streak=0;settings.bestStreak=0;saveSettings();
+  log={};saveLog();ach={};saveAch();
+  timer={mode:"work",endsAt:0,running:false,remain:pomoDuration("work"),round:0};saveTimer();
+  clearImages().then(function(){
+    try{localStorage.removeItem(K("images_fallback"));}catch(e){}
+    try{localStorage.removeItem(NS_KEY);}catch(e){}
+    toast("已清空全部数据");render();
+  });
+}
+
+/* =========================================================
+   13. 事件
+   ========================================================= */
+document.addEventListener("keydown",function(e){
+  if(e.key!=="Enter"&&e.key!==" ")return;
+  var el=e.target&&e.target.closest?e.target.closest("[data-act][tabindex]"):null;
+  if(!el)return;
+  e.preventDefault();el.click();
+});
+document.addEventListener("click",function(e){
+  if(!e.target||!e.target.closest)return;
+  var navBtn=e.target.closest("[data-nav]");
+  if(navBtn){view=navBtn.getAttribute("data-nav");render();return;}
+  var el=e.target.closest("[data-act]");if(!el)return;
+  var act=el.getAttribute("data-act"),id=el.getAttribute("data-id"),v=el.getAttribute("data-v");
+
+  if(act==="go"){view=el.getAttribute("data-view");render();}
+  else if(act==="toggle-answer"){expanded[id]=!expanded[id];renderToday();}
+  else if(act==="pass"){var a=items.filter(function(i){return i.id===id;})[0];
+    if(a){delete expanded[id];passReview(a);toast("👍 已记住，下次 "+a.nextReviewDate);checkAch();render();}}
+  else if(act==="fail"){var b=items.filter(function(i){return i.id===id;})[0];
+    if(b){delete expanded[id];failReview(b);toast("明天再来一次（"+b.nextReviewDate+"）");render();}}
+  else if(act==="add")openEditor(null);
+  else if(act==="edit")openEditor(id);
+  else if(act==="close-editor")closeEditor();
+  else if(act==="pick-subject")$("#edSubject").value=v;
+  else if(act==="pick-tag")$$("#tagRow .chip").forEach(function(x){x.classList.toggle("tag",x.getAttribute("data-v")===v);});
+  else if(act==="del-img")delSlotImage(el.getAttribute("data-slot"));
+  else if(act==="save")saveEditor();
+  else if(act==="delete-item")deleteItem();
+  else if(act==="ai")runAi();
+  else if(act==="ai-fill")fillAi();
+  else if(act==="export")exportJson();
+  else if(act==="export-md")exportMd();
+  else if(act==="clear")clearAll();
+  else if(act==="zoom")showLightbox(el.getAttribute("data-src"));
+  else if(act==="pomo")openPomo();
+  else if(act==="close-pomo"){$("#modal").classList.add("hidden");updateFab();}
+  else if(act==="ptoggle"){if(timer.running)pausePomo();else startPomo();renderPomoPanel();}
+  else if(act==="preset"){resetPomo();renderPomoPanel();}
+  else if(act==="pskip"){
+    var was=timer.mode;timer.running=false;
+    if(was==="work"){timer.round++;var L2=todayLog();L2.pomo++;L2.focusMin+=settings.pomo.work;saveLog();}
+    timer.mode=(was==="work")?((timer.round%settings.pomo.longEvery===0)?"long":"short"):"work";
+    timer.remain=pomoDuration(timer.mode);saveTimer();renderPomoPanel();checkAch();
+    if(view==="today"||view==="stats")render();}
+  else if(act==="pmode"){timer.mode=v;timer.running=false;timer.remain=pomoDuration(v);saveTimer();renderPomoPanel();updateFab();}
+  else if(act==="selftest")openQuiz();
+  else if(act==="close-quiz"){quiz=null;$("#modal").classList.add("hidden");render();}
+  else if(act==="qshow"){quiz.show=true;renderQuiz();}
+  else if(act==="qpass")quizNext(true);
+  else if(act==="qfail")quizNext(false);
+  else if(act==="noise"){setNoise(v);if(view==="settings")renderSettings();}
+  else if(act==="step")applyStep(el.getAttribute("data-g"),el.getAttribute("data-k"),parseInt(el.getAttribute("data-d"),10)||0);
+  else if(act==="ppreset"){
+    var pv=String(v||"").split(",").map(Number);
+    settings.pomo={work:pv[0]||25,short:pv[1]||5,long:pv[2]||15,longEvery:pv[3]||4};
+    saveSettings();
+    if(!timer.running){timer.remain=pomoDuration(timer.mode);saveTimer();}
+    updateFab();renderSettings();
+    toast("番茄钟已设为 "+settings.pomo.work+" / "+settings.pomo.short+" / "+settings.pomo.long+" 分钟");}
+  else if(act==="add-subject"){
+    if(v){if(addSubject(v))toast("已添加科目："+v);else toast("该科目已存在");renderSettings();}
+    else addSubjectFromInput();}
+  else if(act==="del-subject"){removeSubject(v);toast("已移除科目："+v);renderSettings();}
+  else if(act==="open-pomo")openPomo();
+  else if(act==="set-ns")migrateNamespace($("#nsInput")?$("#nsInput").value:"");
+  else if(act==="set-db")migrateDb($("#dbNameInput")?$("#dbNameInput").value:"",$("#dbStoreInput")?$("#dbStoreInput").value:"");
+  else if(act==="img-backend")migrateImgBackend(v);
+  else if(act==="pick-dir")pickBackupDir();
+  else if(act==="backup-dir")backupToDir(false);
+  else if(act==="backup-export")exportBackup();
+  else if(act==="copy")copyText(el.getAttribute("data-copy")||v||"");
+  else if(act==="cqu-tab"){cquTab=v;renderCQU();}
+  else if(act==="cqu-clear"){cquKw="";renderCQU();}
+  else if(act==="save-api"){
+    settings.apiBase=$("#apiBase").value.trim();
+    settings.apiModel=$("#apiModel").value.trim();
+    settings.apiKey=$("#apiKey").value.trim();
+    saveSettings();toast("接口设置已保存");
+  }
+});
+$("#modal").addEventListener("click",function(e){
+  if(e.target!==this)return;
+  if(quiz)quiz=null;else closeEditor();
+  this.classList.add("hidden");
+});
+$("#gearBtn").addEventListener("click",function(){view="settings";render();});
+function copyText(t){
+  if(!t)return;
+  var done=function(){toast("已复制："+t);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(done).catch(function(){fallbackCopy(t,done);});
+  }else fallbackCopy(t,done);
+}
+function fallbackCopy(t,done){
+  try{
+    var ta=document.createElement("textarea");ta.value=t;
+    ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);
+    ta.select();document.execCommand("copy");ta.remove();done();
+  }catch(e){toast("复制失败，请长按手动复制");}
+}
+$("#pomoFab").addEventListener("click",openPomo);
+function showLightbox(src){
+  if(!src)return;
+  var lb=document.createElement("div");lb.id="lightbox";
+  lb.innerHTML='<img src="'+src+'" alt="预览">';
+  lb.addEventListener("click",function(){lb.remove();});
+  document.body.appendChild(lb);
+}
+
+/* =========================================================
+   14. 启动
+   ========================================================= */
+loadTimer();
+if(timer.running&&timer.endsAt<=Date.now()){timer.running=false;timer.remain=0;saveTimer();}
+updateFab();
+setInterval(tickPomo,500);
+var lastDay=todayStr();
+setInterval(function(){
+  var t=todayStr();
+  if(t!==lastDay){lastDay=t;render();}
+},60000);
+render();
+if(fsSupported())sysGet("dir").then(function(h){
+  if(h){dirHandle=h;if(view==="settings")renderSettings();}
+}).catch(function(){});
+setTimeout(function(){
+  ensureNotify();
+  var n=dueItems().length;
+  if(n>0)notify("📅 今天有 "+n+" 道错题待复习","打开错题复习提醒器开始今天的一轮");
+},1200);
+</script>
+</body>
+</html>
