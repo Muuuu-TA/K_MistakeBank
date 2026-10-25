@@ -268,9 +268,23 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .subj-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
   padding:6px 11px;background:var(--glass2);font-size:13px;cursor:pointer}
 .subj-chip .x{color:var(--bad);font-weight:700;font-size:14px;line-height:1}
-.stepper{display:flex;align-items:center;gap:8px}
+.stepper{display:flex;align-items:center;gap:8px;flex:0 0 auto;max-width:100%}
 .stepper .btn{flex:0 0 38px;min-height:40px;padding:0;font-size:18px}
-.stepper .sv{flex:1;text-align:center;font-weight:800;font-variant-numeric:tabular-nums}
+.sv-wrap{display:inline-flex;align-items:center;gap:6px;flex:0 1 auto;min-width:0}
+/* 数值可手动输入 */
+.sv{width:78px;min-width:0;flex:0 1 78px;text-align:center;font-weight:800;font-variant-numeric:tabular-nums;
+  font-size:15px;border:1px solid var(--line);border-radius:11px;padding:8px 6px;
+  background:var(--glass2);color:var(--fg);outline:none;-moz-appearance:textfield;appearance:textfield}
+.sv::-webkit-outer-spin-button,.sv::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sv:focus{border-color:var(--accent);box-shadow:var(--glow)}
+.sv-u{font-size:12px;color:var(--muted);flex:0 0 auto;white-space:nowrap}
+/* 步进器所在行：窄屏自动换行，避免按钮被挤出界面 */
+.srow{align-items:center;row-gap:8px}
+.srow-label{flex:1 1 170px;min-width:0}
+@media (max-width:560px){
+  .srow-label{flex:1 1 100%}
+  .stepper{margin-left:auto}
+}
 </style>
 </head>
 <body>
@@ -1187,6 +1201,7 @@ function renderSettings(){
     if(e.target.checked)ensureNotify();});
   var si=$("#subjInput");
   if(si)si.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();addSubjectFromInput();}});
+  bindStepInputs();
   var nv=$("#noiseVol");
   nv.addEventListener("input",function(e){noiseVol=Math.max(0.01,Math.min(1,e.target.value/100));if(noiseGain)noiseGain.gain.value=noiseVol*0.6;});
   var imp=$("#importFile");
@@ -1222,23 +1237,53 @@ function stepRow(label,key,val,unit,desc,group,step){
   group=group||"pomo";
   var lim=(STEPPER[group]&&STEPPER[group][key])||[1,999,1];
   step=step||lim[2];
-  return '<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)">'+
-    '<div style="flex:1;min-width:0"><div style="font-size:14px">'+esc(label)+'</div>'+
+  var gid="st_"+group+"_"+key;
+  return '<div class="row wrap srow" style="padding:9px 0;border-bottom:1px solid var(--line)">'+
+    '<div class="srow-label"><label style="font-size:14px" for="'+gid+'">'+esc(label)+'</label>'+
       (desc?'<div class="tiny muted">'+esc(desc)+'</div>':'')+'</div>'+
-    '<div class="stepper" style="flex:0 0 auto">'+
+    '<div class="stepper">'+
       '<button class="btn" data-act="step" data-g="'+group+'" data-k="'+key+'" data-d="-'+step+'" '+(val<=lim[0]?"disabled":"")+'>−</button>'+
-      '<span class="sv" style="min-width:76px">'+val+' '+esc(unit)+'</span>'+
+      '<span class="sv-wrap">'+
+        '<input class="sv mono" id="'+gid+'" type="number" inputmode="numeric" '+
+          'min="'+lim[0]+'" max="'+lim[1]+'" step="'+step+'" value="'+val+'" '+
+          'data-act="step-input" data-g="'+group+'" data-k="'+key+'">'+
+        '<span class="sv-u">'+esc(unit)+'</span>'+
+      '</span>'+
       '<button class="btn" data-act="step" data-g="'+group+'" data-k="'+key+'" data-d="'+step+'" '+(val>=lim[1]?"disabled":"")+'>＋</button>'+
     '</div></div>';
 }
 function applyStep(group,key,delta){
   var lim=(STEPPER[group]&&STEPPER[group][key]);if(!lim)return;
   var obj=group==="goal"?settings.goal:settings.pomo;
-  obj[key]=Math.max(lim[0],Math.min(lim[1],(parseInt(obj[key],10)||0)+delta));
-  saveSettings();
+  applyStepValue(group,key,(parseInt(obj[key],10)||0)+delta,true);
+}
+/* 手动输入 / 加减按钮统一入口：越界自动夹取到合法范围 */
+function applyStepValue(group,key,v,silent){
+  var lim=(STEPPER[group]&&STEPPER[group][key]);if(!lim)return;
+  var obj=group==="goal"?settings.goal:settings.pomo;
+  var n=parseInt(String(v).replace(/[^\d-]/g,""),10);
+  if(isNaN(n)){renderSettings();return;}
+  n=Math.max(lim[0],Math.min(lim[1],n));
+  var changed=(n!==obj[key]);
+  obj[key]=n;saveSettings();
   if(group==="pomo"&&!timer.running)timer.remain=pomoDuration(timer.mode);
   saveTimer();updateFab();
   renderSettings();
+  if(!silent&&changed)toast("已设为 "+n+" "+stepUnit(group,key));
+}
+function stepUnit(group,key){
+  if(group==="goal"&&key==="reviews")return "道";
+  if(group==="pomo"&&key==="longEvery")return "轮";
+  return "分钟";
+}
+function bindStepInputs(){
+  $$(".stepper .sv").forEach(function(inp){
+    inp.addEventListener("change",function(){
+      applyStepValue(inp.getAttribute("data-g"),inp.getAttribute("data-k"),inp.value);});
+    inp.addEventListener("keydown",function(e){
+      if(e.key==="Enter"){e.preventDefault();inp.blur();}});
+    inp.addEventListener("focus",function(){try{inp.select();}catch(e){}});
+  });
 }
 function addSubjectFromInput(){
   var el=$("#subjInput");if(!el)return;
